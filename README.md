@@ -1,375 +1,296 @@
-# Construction CRM Backend API
+# Real Estate CRM - Full Stack Application
 
-A comprehensive FastAPI backend for construction and real estate CRM management with PostgreSQL database, JWT authentication, and file upload capabilities.
+A production-ready Real Estate CRM system with React frontend, FastAPI backend, Cloudflare D1 database, and R2 storage.
+
+## System Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   React App     │    │   FastAPI       │    │ Cloudflare      │
+│   (Frontend)    │◄──►│   (Backend)     │◄──►│ Worker          │
+│                 │    │                 │    │ (DB Proxy)      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+                                               ┌─────────────────┐
+                                               │ Cloudflare D1   │
+                                               │ (Database)      │
+                                               └─────────────────┘
+                                                        │
+                                               ┌─────────────────┐
+                                               │ Cloudflare R2   │
+                                               │ (File Storage)  │
+                                               └─────────────────┘
+```
 
 ## Features
 
-- 🔐 **JWT Authentication** - Secure user authentication with role-based access
-- 👥 **User Management** - Admin and employee roles with different permissions
-- 📊 **Lead Management** - Track and manage sales leads
-- 🏗️ **Developer Management** - Manage construction developers and contractors
-- 📞 **Contact Management** - Organize business contacts across categories
-- 🏢 **Project Management** - Handle different types of construction projects
-- 📦 **Inventory Management** - Track properties and assets
-- 🏞️ **Land Management** - Manage land parcels with document tracking
-- ⏳ **Pending Actions** - Employee request approval system
-- 📁 **File Upload** - Support for AWS S3 or local file storage
-- 🗄️ **PostgreSQL Database** - Production-ready database with migrations
-- 📚 **API Documentation** - Auto-generated OpenAPI/Swagger docs
+### Authentication & Authorization
+- **6 Hardcoded Users**: 1 admin ("boss") + 5 employees ("emp1-emp5")
+- **Role-Based Access Control**: Admin vs Employee permissions
+- **Secure Sessions**: JWT tokens in HttpOnly cookies
+- **No Self-Registration**: Only predefined accounts can login
 
-## Tech Stack
+### Approval Workflow
+- **Employee Actions**: Create/Update/Delete requests become pending actions
+- **Admin Approval**: Review and approve/reject employee requests
+- **Atomic Operations**: Approved changes applied transactionally
+- **Audit Trail**: Complete history of all changes
 
-- **FastAPI** - Modern, fast web framework for building APIs
-- **PostgreSQL** - Robust relational database
-- **SQLAlchemy** - Python SQL toolkit and ORM
-- **Alembic** - Database migration tool
-- **JWT** - JSON Web Tokens for authentication
-- **Pydantic** - Data validation using Python type annotations
-- **Boto3** - AWS SDK for file uploads (optional)
+### Data Management
+- **Advanced Filtering**: Per-column filters with global search
+- **CSV Import/Export**: Bulk data operations with validation
+- **File Uploads**: Document management with R2 storage
+- **Real-time Updates**: Live data synchronization
+
+### Security
+- **HMAC-Signed Requests**: All database calls cryptographically signed
+- **Prepared Statements**: SQL injection prevention
+- **Rate Limiting**: Login and API rate limits
+- **Input Validation**: Comprehensive data validation
 
 ## Quick Start
 
-### 1. Clone and Setup
+### Prerequisites
+- Node.js 18+
+- Python 3.11+
+- Cloudflare account with D1 and R2 enabled
+
+### 1. Setup Cloudflare Services
 
 ```bash
-git clone <your-repo>
-cd construction-crm-backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+# Install Wrangler CLI
+npm install -g wrangler
+
+# Login to Cloudflare
+wrangler login
+
+# Create D1 database
+wrangler d1 create real_estate_db
+# Note the database_id for later
+
+# Create R2 bucket
+wrangler r2 bucket create real-estate-documents
 ```
 
-### 2. Database Setup (Supabase PostgreSQL)
-
-#### Option A: Supabase (Recommended)
-
-1. Go to [Supabase](https://supabase.com) and create a new project
-2. Go to Settings → Database
-3. Copy your connection string (it looks like):
-   ```
-   postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
-   ```
-
-#### Option B: Render PostgreSQL
-
-1. Go to [Render](https://render.com) and create a PostgreSQL database
-2. Copy the External Database URL
-
-#### Option C: Local PostgreSQL
+### 2. Deploy Database Worker
 
 ```bash
-# Install PostgreSQL locally
-# Create database
-createdb construction_crm
+cd cloudflare-worker
+npm install
+
+# Update wrangler.toml with your database_id
+# Set HMAC secret
+wrangler secret put HMAC_SECRET
+
+# Apply database schema
+wrangler d1 migrations apply real_estate_db
+wrangler d1 execute real_estate_db --file ../db/seed.sql
+
+# Deploy worker
+wrangler deploy
+# Note the worker URL for backend configuration
 ```
 
-### 3. Environment Configuration
-
-Create `.env` file:
+### 3. Setup Backend
 
 ```bash
+cd backend
+pip install -e .
+
+# Configure environment
 cp .env.example .env
+# Edit .env with your Cloudflare credentials and worker URL
+
+# Run backend
+uvicorn app.main:app --reload
 ```
 
-Edit `.env` with your database credentials:
-
-```env
-# Database Configuration
-DATABASE_URL=postgresql://postgres:your-password@db.your-project-ref.supabase.co:5432/postgres
-
-# JWT Configuration
-SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# AWS S3 (Optional - for file uploads)
-AWS_ACCESS_KEY_ID=your-aws-access-key
-AWS_SECRET_ACCESS_KEY=your-aws-secret-key
-AWS_BUCKET_NAME=your-bucket-name
-AWS_REGION=us-east-1
-
-# Environment
-ENVIRONMENT=development
-DEBUG=True
-```
-
-### 4. Database Migration
+### 4. Setup Frontend
 
 ```bash
-# Initialize Alembic (first time only)
-alembic revision --autogenerate -m "Initial migration"
+# Install dependencies (if not already done)
+npm install
 
-# Run migrations
-alembic upgrade head
+# Configure environment
+cp .env.example .env
+# Edit .env with backend URL
 
-# Initialize with sample data
-python scripts/init_db.py
+# Run frontend
+npm run dev
 ```
 
-### 5. Run the Application
+### 5. Access Application
 
-```bash
-# Development
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
 
-# Production
-python main.py
-```
+## Default Accounts
 
-The API will be available at:
-- **API**: http://localhost:8000
-- **Documentation**: http://localhost:8000/docs
-- **Alternative Docs**: http://localhost:8000/redoc
+| Username | Password    | Role     |
+|----------|-------------|----------|
+| boss     | password123 | admin    |
+| emp1     | password123 | employee |
+| emp2     | password123 | employee |
+| emp3     | password123 | employee |
+| emp4     | password123 | employee |
+| emp5     | password123 | employee |
 
-## Default Users
-
-After running `python scripts/init_db.py`, you'll have these test accounts:
-
-| Role | Email | Password | Username |
-|------|-------|----------|----------|
-| Admin | admin@construction.com | admin123 | admin |
-| Employee | john@construction.com | john123 | john |
-| Employee | sarah@construction.com | sarah123 | sarah |
-
-## API Endpoints
-
-### Authentication
-- `POST /api/v1/auth/login` - User login
-- `POST /api/v1/auth/token` - OAuth2 compatible token endpoint
-
-### Users
-- `GET /api/v1/users/` - List users (Admin only)
-- `POST /api/v1/users/` - Create user (Admin only)
-- `GET /api/v1/users/{user_id}` - Get user details
-- `PUT /api/v1/users/{user_id}` - Update user
-- `DELETE /api/v1/users/{user_id}` - Delete user (Admin only)
-- `GET /api/v1/users/me/` - Get current user profile
-
-### Leads
-- `GET /api/v1/leads/` - List leads (filtered by user role)
-- `POST /api/v1/leads/` - Create lead
-- `GET /api/v1/leads/{lead_id}` - Get lead details
-- `PUT /api/v1/leads/{lead_id}` - Update lead
-- `DELETE /api/v1/leads/{lead_id}` - Delete lead
-
-### Developers
-- `GET /api/v1/developers/` - List developers
-- `POST /api/v1/developers/` - Create developer
-- `GET /api/v1/developers/{developer_id}` - Get developer details
-- `PUT /api/v1/developers/{developer_id}` - Update developer
-- `DELETE /api/v1/developers/{developer_id}` - Delete developer
-
-### Contacts
-- `GET /api/v1/contacts/` - List contacts
-- `POST /api/v1/contacts/` - Create contact
-- `GET /api/v1/contacts/{contact_id}` - Get contact details
-- `PUT /api/v1/contacts/{contact_id}` - Update contact
-- `DELETE /api/v1/contacts/{contact_id}` - Delete contact
-
-### Projects
-- `GET /api/v1/projects/` - List projects
-- `POST /api/v1/projects/` - Create project
-- `GET /api/v1/projects/{project_id}` - Get project details
-- `PUT /api/v1/projects/{project_id}` - Update project
-- `DELETE /api/v1/projects/{project_id}` - Delete project
-
-### Inventory
-- `GET /api/v1/inventory/` - List inventory items
-- `POST /api/v1/inventory/` - Create inventory item
-- `GET /api/v1/inventory/{inventory_id}` - Get inventory details
-- `PUT /api/v1/inventory/{inventory_id}` - Update inventory item
-- `DELETE /api/v1/inventory/{inventory_id}` - Delete inventory item
-
-### Land Parcels
-- `GET /api/v1/land/` - List land parcels
-- `POST /api/v1/land/` - Create land parcel
-- `GET /api/v1/land/{land_id}` - Get land parcel details
-- `PUT /api/v1/land/{land_id}` - Update land parcel
-- `DELETE /api/v1/land/{land_id}` - Delete land parcel
-
-### Pending Actions
-- `GET /api/v1/pending-actions/` - List pending actions (Admin only)
-- `GET /api/v1/pending-actions/my-requests` - List user's requests
-- `GET /api/v1/pending-actions/{action_id}` - Get action details
-- `PUT /api/v1/pending-actions/{action_id}` - Approve/reject action (Admin only)
-- `DELETE /api/v1/pending-actions/{action_id}` - Delete action (Admin only)
-
-## Authentication
-
-All endpoints (except login) require JWT authentication. Include the token in the Authorization header:
-
-```bash
-Authorization: Bearer <your-jwt-token>
-```
-
-### Example Login Request
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@construction.com",
-    "password": "admin123"
-  }'
-```
-
-## File Upload Configuration
-
-### AWS S3 Setup (Recommended for Production)
-
-1. Create an AWS S3 bucket
-2. Create an IAM user with S3 permissions
-3. Add AWS credentials to your `.env` file:
-
-```env
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_BUCKET_NAME=your-bucket-name
-AWS_REGION=us-east-1
-```
-
-### Local File Storage (Development)
-
-If AWS credentials are not provided, files will be stored locally in the `uploads/` directory.
-
-## Deployment
-
-### Deploy to Render
-
-1. Fork this repository
-2. Connect your GitHub account to Render
-3. Create a new Web Service
-4. Set environment variables in Render dashboard
-5. Deploy!
-
-**Render Environment Variables:**
-```
-DATABASE_URL=<your-render-postgresql-url>
-SECRET_KEY=<your-secret-key>
-ENVIRONMENT=production
-DEBUG=False
-```
-
-### Deploy to Railway
-
-1. Install Railway CLI: `npm install -g @railway/cli`
-2. Login: `railway login`
-3. Initialize: `railway init`
-4. Add PostgreSQL: `railway add postgresql`
-5. Set environment variables: `railway variables set SECRET_KEY=your-secret-key`
-6. Deploy: `railway up`
-
-### Deploy to Heroku
-
-1. Install Heroku CLI
-2. Create app: `heroku create your-app-name`
-3. Add PostgreSQL: `heroku addons:create heroku-postgresql:hobby-dev`
-4. Set environment variables:
-   ```bash
-   heroku config:set SECRET_KEY=your-secret-key
-   heroku config:set ENVIRONMENT=production
-   heroku config:set DEBUG=False
-   ```
-5. Deploy: `git push heroku main`
-
-## Database Migrations
-
-```bash
-# Create new migration
-alembic revision --autogenerate -m "Description of changes"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback migration
-alembic downgrade -1
-
-# View migration history
-alembic history
-```
-
-## Development
-
-### Project Structure
-
-```
-construction-crm-backend/
-├── app/
-│   ├── api/
-│   │   └── v1/
-│   │       └── endpoints/
-│   ├── core/
-│   ├── models/
-│   ├── schemas/
-│   └── services/
-├── alembic/
-├── scripts/
-├── main.py
-├── requirements.txt
-└── README.md
-```
+## Development Workflow
 
 ### Adding New Features
 
-1. **Models**: Add database models in `app/models/`
-2. **Schemas**: Add Pydantic schemas in `app/schemas/`
-3. **Endpoints**: Add API routes in `app/api/v1/endpoints/`
-4. **Services**: Add business logic in `app/services/`
-5. **Migration**: Create migration with `alembic revision --autogenerate`
+1. **Database Changes**: Update migrations in `/db/migrations/`
+2. **Worker Updates**: Add new endpoints in `cloudflare-worker/src/index.ts`
+3. **Backend Changes**: Add schemas, routers, and services
+4. **Frontend Updates**: Update components and API calls
 
-### Testing
+### Testing Changes
 
 ```bash
-# Install test dependencies
-pip install pytest pytest-asyncio httpx
+# Backend tests
+cd backend
+pytest tests/ -v
 
-# Run tests
-pytest
+# Frontend tests
+npm test
 
-# Run with coverage
-pytest --cov=app
+# Integration tests
+# Test with real Cloudflare services in staging
 ```
 
-## Security Considerations
+### Deployment
 
-- Change the `SECRET_KEY` in production
-- Use HTTPS in production
-- Implement rate limiting
-- Validate all inputs
-- Use environment variables for sensitive data
-- Regular security updates
+#### Production Backend
+```bash
+# Build and deploy container
+docker build -t real-estate-crm-backend .
+# Deploy to your container platform (Render, Fly.io, etc.)
+```
+
+#### Production Worker
+```bash
+cd cloudflare-worker
+wrangler deploy --env production
+```
+
+#### Production Frontend
+```bash
+# Build for production
+npm run build
+# Deploy to your hosting platform (Vercel, Netlify, etc.)
+```
+
+## Configuration
+
+### Environment Variables
+
+#### Backend (.env)
+```bash
+DEBUG=false
+JWT_SECRET=your-production-secret
+WORKER_BASE=https://your-worker.workers.dev
+WORKER_HMAC_SECRET=your-hmac-secret
+R2_ENDPOINT=https://account-id.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=your-access-key
+R2_SECRET_ACCESS_KEY=your-secret-key
+CORS_ORIGINS=["https://your-frontend.com"]
+```
+
+#### Frontend (.env)
+```bash
+VITE_API_BASE=https://your-api.com
+```
+
+#### Worker (wrangler.toml)
+```toml
+[vars]
+ALLOWED_ORIGINS = "https://your-frontend.com"
+
+[env.production.vars]
+ALLOWED_ORIGINS = "https://your-frontend.com"
+```
+
+## API Usage Examples
+
+### Authentication
+```javascript
+// Login
+const response = await fetch('/api/auth/login', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'boss', password: 'password123' })
+});
+
+// Get current user
+const user = await fetch('/api/auth/me', { credentials: 'include' });
+```
+
+### Data Operations
+```javascript
+// List leads with filters
+const leads = await fetch('/api/v1/leads?city=Mumbai&type_of_place=Office', {
+  credentials: 'include'
+});
+
+// Create lead (admin) or pending action (employee)
+const newLead = await fetch('/api/v1/leads', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    inquiry_no: 'LEAD-001',
+    client_company: 'ABC Corp',
+    contact_person: 'John Doe',
+    // ... other fields
+  })
+});
+```
+
+### File Upload
+```javascript
+const formData = new FormData();
+formData.append('file', file);
+formData.append('entity', 'leads');
+formData.append('entity_id', 'lead-123');
+formData.append('label', 'Property Card');
+
+const upload = await fetch('/api/v1/upload', {
+  method: 'POST',
+  credentials: 'include',
+  body: formData
+});
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Database Connection Error**
-   - Check your `DATABASE_URL` in `.env`
-   - Ensure PostgreSQL is running
-   - Verify network connectivity
+1. **CORS Errors**: Ensure CORS_ORIGINS includes your frontend URL
+2. **Authentication Failures**: Check JWT_SECRET matches and cookies are enabled
+3. **Database Errors**: Verify Worker is deployed and D1 database exists
+4. **File Upload Issues**: Check R2 credentials and bucket permissions
 
-2. **Migration Errors**
-   - Check if database exists
-   - Ensure proper permissions
-   - Run `alembic upgrade head`
+### Debug Mode
 
-3. **Authentication Issues**
-   - Verify JWT token format
-   - Check token expiration
-   - Ensure user is active
+Enable debug logging:
+```bash
+DEBUG=true uvicorn app.main:app --reload --log-level debug
+```
 
-4. **File Upload Issues**
-   - Check AWS credentials
-   - Verify bucket permissions
-   - Ensure proper file types
+### Health Checks
 
-### Getting Help
+- **Backend**: `GET /health`
+- **Worker**: `GET https://your-worker.workers.dev/health`
 
-- Check the API documentation at `/docs`
-- Review the logs for error details
-- Ensure all environment variables are set correctly
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with tests
+4. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License.#   c o n s t r  
- 
+MIT License - see LICENSE file for details.

@@ -1,389 +1,240 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Eye, FileText, ExternalLink } from 'lucide-react';
-import DataTable from '../Common/DataTable';
-import Modal from '../Common/Modal';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Upload, Download, Trash2, Eye, FileText, File, Image, Video } from 'lucide-react';
 import { Document } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { exportToCSV, downloadTemplate } from '../../utils/exportUtils';
+import { apiGet, apiDelete, apiUpload, ApiError } from '../../lib/api';
+import Modal from '../Common/Modal';
 
-const DocumentsManager: React.FC = () => {
+interface DocumentsManagerProps {
+  entity: string;
+  entityId: string;
+  title?: string;
+}
+
+const DocumentsManager: React.FC<DocumentsManagerProps> = ({ entity, entityId, title }) => {
   const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
-  const [editingDocument, setEditingDocument] = useState<Document | null>(null);
-
-  const [formData, setFormData] = useState({
-    propertyCard: '',
-    googleLocation: '',
-    plotLayout: '',
-    dpRemarks: '',
-    surveyTitle: '',
-    iod: '',
-    noc: ''
-  });
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadLabel, setUploadLabel] = useState('');
 
   useEffect(() => {
     loadDocuments();
-  }, []);
+  }, [entity, entityId]);
 
-  const loadDocuments = () => {
-    const storedDocuments: Document[] = JSON.parse(localStorage.getItem('documents') || '[]');
-    setDocuments(storedDocuments);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const allDocuments: Document[] = JSON.parse(localStorage.getItem('documents') || '[]');
-
-    if (editingDocument) {
-      const updatedDocuments = allDocuments.map(doc =>
-        doc.id === editingDocument.id
-          ? { ...doc, ...formData }
-          : doc
-      );
-      localStorage.setItem('documents', JSON.stringify(updatedDocuments));
-    } else {
-      const newDocument: Document = {
-        id: Date.now().toString(),
-        ...formData,
-        createdAt: new Date().toISOString().split('T')[0]
-      };
-      allDocuments.push(newDocument);
-      localStorage.setItem('documents', JSON.stringify(allDocuments));
-    }
-
-    loadDocuments();
-    resetForm();
-    setShowModal(false);
-  };
-
-  const handleEdit = (document: Document) => {
-    setEditingDocument(document);
-    setFormData({
-      propertyCard: document.propertyCard,
-      googleLocation: document.googleLocation,
-      plotLayout: document.plotLayout,
-      dpRemarks: document.dpRemarks,
-      surveyTitle: document.surveyTitle,
-      iod: document.iod,
-      noc: document.noc
-    });
-    setShowModal(true);
-  };
-
-  const handleDelete = (document: Document) => {
-    if (window.confirm('Are you sure you want to delete this document record?')) {
-      const allDocuments: Document[] = JSON.parse(localStorage.getItem('documents') || '[]');
-      const updatedDocuments = allDocuments.filter(d => d.id !== document.id);
-      localStorage.setItem('documents', JSON.stringify(updatedDocuments));
-      loadDocuments();
-    }
-  };
-
-  const handleViewDetails = (document: Document) => {
-    setSelectedDocument(document);
-    setShowDetailsModal(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      propertyCard: '',
-      googleLocation: '',
-      plotLayout: '',
-      dpRemarks: '',
-      surveyTitle: '',
-      iod: '',
-      noc: ''
-    });
-    setEditingDocument(null);
-  };
-
-  const handleExport = () => {
-    exportToCSV(documents, 'documents');
-  };
-
-  const handleImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const csv = e.target?.result as string;
-          const lines = csv.split('\n');
-          const headers = lines[0].split(',');
-          
-          const importedDocuments = lines.slice(1)
-            .filter(line => line.trim())
-            .map(line => {
-              const values = line.split(',');
-              const document: Partial<Document> = {};
-              headers.forEach((header, index) => {
-                const key = header.trim() as keyof Document;
-                (document as any)[key] = values[index]?.trim();
-              });
-              return {
-                ...document,
-                id: Date.now().toString() + Math.random(),
-                createdAt: new Date().toISOString().split('T')[0]
-              } as Document;
-            });
-
-          const allDocuments: Document[] = JSON.parse(localStorage.getItem('documents') || '[]');
-          const updatedDocuments = [...allDocuments, ...importedDocuments];
-          localStorage.setItem('documents', JSON.stringify(updatedDocuments));
-          loadDocuments();
-        };
-        reader.readAsText(file);
+  const loadDocuments = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiGet<Document[]>('/api/v1/documents', {
+        entity,
+        entity_id: entityId
+      });
+      if (response.ok && response.data) {
+        setDocuments(response.data);
       }
-    };
-    input.click();
+    } catch (error) {
+      console.error('Failed to load documents:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [entity, entityId]);
+
+  const handleUpload = useCallback(async (file: File, label: string) => {
+    try {
+      setUploading(true);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entity', entity);
+      formData.append('entity_id', entityId);
+      formData.append('label', label);
+
+      const response = await apiUpload<Document>('/api/v1/upload', formData);
+      
+      if (response.ok) {
+        await loadDocuments();
+        setShowUploadModal(false);
+        setUploadLabel('');
+        alert('File uploaded successfully!');
+      }
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert('Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  }, [entity, entityId, loadDocuments]);
+
+  const handleDelete = useCallback(async (document: Document) => {
+    if (!window.confirm('Are you sure you want to delete this document?')) return;
+    
+    try {
+      await apiDelete(`/api/v1/documents/${document.id}`);
+      await loadDocuments();
+      alert('Document deleted successfully!');
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      alert('Failed to delete document. Please try again.');
+    }
+  }, [loadDocuments]);
+
+  const getFileIcon = (contentType: string) => {
+    if (contentType.startsWith('image/')) return <Image className="h-5 w-5 text-blue-600" />;
+    if (contentType.startsWith('video/')) return <Video className="h-5 w-5 text-purple-600" />;
+    if (contentType.includes('pdf')) return <FileText className="h-5 w-5 text-red-600" />;
+    return <File className="h-5 w-5 text-gray-600" />;
   };
 
-  const columns = [
-    { key: 'propertyCard', label: 'Property Card', sortable: true },
-    { key: 'plotLayout', label: 'Plot Layout', sortable: true },
-    { key: 'dpRemarks', label: 'DP Remarks', sortable: true },
-    { key: 'surveyTitle', label: 'Survey Title', sortable: true },
-    { key: 'iod', label: 'IOD', sortable: true },
-    { key: 'noc', label: 'NOC', sortable: true },
-    { key: 'createdAt', label: 'Created', sortable: true }
-  ];
-
-  const actions = [
-    {
-      label: 'View Details',
-      icon: Eye,
-      onClick: handleViewDetails,
-      variant: 'secondary' as const
-    },
-    {
-      label: 'Edit',
-      icon: Edit,
-      onClick: handleEdit,
-      variant: 'primary' as const
-    },
-    {
-      label: 'Delete',
-      icon: Trash2,
-      onClick: handleDelete,
-      variant: 'danger' as const
-    }
-  ];
-
-  const filteredActions = user?.role === 'admin' ? actions : actions.filter(action => action.label === 'View Details');
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Documents Management</h1>
-          <p className="text-gray-600">Manage property documents and legal papers</p>
-        </div>
-        {user?.role === 'admin' && (
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => downloadTemplate('documents')}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 transition-colors"
-            >
-              <FileText className="h-4 w-4" />
-              <span>Template</span>
-            </button>
-            <button
-              onClick={() => {
-                resetForm();
-                setShowModal(true);
-              }}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add Document</span>
-            </button>
-          </div>
-        )}
+        <h3 className="text-lg font-medium text-gray-900">
+          {title || 'Documents'}
+        </h3>
+        <button
+          onClick={() => setShowUploadModal(true)}
+          className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+        >
+          <Upload className="h-4 w-4" />
+          <span>Upload</span>
+        </button>
       </div>
 
-      <DataTable
-        data={documents}
-        columns={columns}
-        actions={filteredActions}
-        searchable={true}
-        exportable={true}
-        importable={user?.role === 'admin'}
-        onExport={handleExport}
-        onImport={handleImport}
-        title="Document Records"
-      />
+      {loading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-500">Loading documents...</p>
+        </div>
+      ) : documents.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">
+          <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+          <p>No documents uploaded yet</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="divide-y divide-gray-200">
+            {documents.map((doc) => (
+              <div key={doc.id} className="p-4 hover:bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    {getFileIcon(doc.content_type)}
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{doc.filename}</p>
+                      <p className="text-xs text-gray-500">
+                        {doc.label} • {formatFileSize(doc.file_size)} • 
+                        Uploaded by {doc.uploaded_by_name} on {new Date(doc.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {doc.public_url && (
+                      <a
+                        href={doc.public_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="View/Download"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </a>
+                    )}
+                    {(user?.role === 'admin' || doc.uploaded_by === user?.id) && (
+                      <button
+                        onClick={() => handleDelete(doc)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* Add/Edit Modal */}
+      {/* Upload Modal */}
       <Modal
-        isOpen={showModal}
+        isOpen={showUploadModal}
         onClose={() => {
-          setShowModal(false);
-          resetForm();
+          setShowUploadModal(false);
+          setUploadLabel('');
         }}
-        title={editingDocument ? 'Edit Document Record' : 'Add New Document Record'}
-        size="lg"
+        title="Upload Document"
+        size="md"
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Property Card *
-              </label>
-              <input
-                type="text"
-                value={formData.propertyCard}
-                onChange={(e) => setFormData({ ...formData, propertyCard: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Google Location
-              </label>
-              <input
-                type="url"
-                value={formData.googleLocation}
-                onChange={(e) => setFormData({ ...formData, googleLocation: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="https://maps.google.com/..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Plot Layout
-              </label>
-              <input
-                type="text"
-                value={formData.plotLayout}
-                onChange={(e) => setFormData({ ...formData, plotLayout: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                DP Remarks
-              </label>
-              <input
-                type="text"
-                value={formData.dpRemarks}
-                onChange={(e) => setFormData({ ...formData, dpRemarks: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Survey Title
-              </label>
-              <input
-                type="text"
-                value={formData.surveyTitle}
-                onChange={(e) => setFormData({ ...formData, surveyTitle: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                IOD
-              </label>
-              <input
-                type="text"
-                value={formData.iod}
-                onChange={(e) => setFormData({ ...formData, iod: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                NOC
-              </label>
-              <input
-                type="text"
-                value={formData.noc}
-                onChange={(e) => setFormData({ ...formData, noc: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            const file = formData.get('file') as File;
+            if (file && uploadLabel) {
+              handleUpload(file, uploadLabel);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Document Label *
+            </label>
+            <input
+              type="text"
+              value={uploadLabel}
+              onChange={(e) => setUploadLabel(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="e.g., Property Card, NOC, etc."
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              File *
+            </label>
+            <input
+              type="file"
+              name="file"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Maximum file size: 10MB
+            </p>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
               onClick={() => {
-                setShowModal(false);
-                resetForm();
+                setShowUploadModal(false);
+                setUploadLabel('');
               }}
               className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+              disabled={uploading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+              disabled={uploading || !uploadLabel}
             >
-              {editingDocument ? 'Update Document' : 'Create Document'}
+              {uploading ? 'Uploading...' : 'Upload'}
             </button>
           </div>
         </form>
-      </Modal>
-
-      {/* Details Modal */}
-      <Modal
-        isOpen={showDetailsModal}
-        onClose={() => setShowDetailsModal(false)}
-        title="Document Details"
-        size="lg"
-      >
-        {selectedDocument && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Property Card</label>
-                <p className="text-sm text-gray-900">{selectedDocument.propertyCard}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Google Location</label>
-                {selectedDocument.googleLocation ? (
-                  <a href={selectedDocument.googleLocation} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-800 flex items-center">
-                    View on Google Maps <ExternalLink className="h-3 w-3 ml-1" />
-                  </a>
-                ) : (
-                  <p className="text-sm text-gray-500">Not provided</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Plot Layout</label>
-                <p className="text-sm text-gray-900">{selectedDocument.plotLayout || 'Not specified'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">DP Remarks</label>
-                <p className="text-sm text-gray-900">{selectedDocument.dpRemarks || 'Not specified'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Survey Title</label>
-                <p className="text-sm text-gray-900">{selectedDocument.surveyTitle || 'Not specified'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">IOD</label>
-                <p className="text-sm text-gray-900">{selectedDocument.iod || 'Not specified'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">NOC</label>
-                <p className="text-sm text-gray-900">{selectedDocument.noc || 'Not specified'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500">Created Date</label>
-                <p className="text-sm text-gray-900">{selectedDocument.createdAt}</p>
-              </div>
-            </div>
-          </div>
-        )}
       </Modal>
     </div>
   );

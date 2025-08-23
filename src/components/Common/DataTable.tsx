@@ -25,6 +25,14 @@ interface DataTableProps {
   onImport?: () => void;
   onExport?: () => void;
   title?: string;
+  loading?: boolean;
+  meta?: {
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+  };
+  onPageChange?: (page: number) => void;
 }
 
 const DataTable: React.FC<DataTableProps> = ({
@@ -36,13 +44,14 @@ const DataTable: React.FC<DataTableProps> = ({
   importable = false,
   onImport,
   onExport,
-  title
+  title,
+  loading = false,
+  meta,
+  onPageChange
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
 
   // Filter data based on search term
   const filteredData = data.filter(row =>
@@ -62,10 +71,10 @@ const DataTable: React.FC<DataTableProps> = ({
       })
     : filteredData;
 
-  // Paginate data
-  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedData = sortedData.slice(startIndex, startIndex + itemsPerPage);
+  // Use server-side pagination if meta is provided
+  const paginatedData = meta ? data : sortedData.slice(startIndex, startIndex + itemsPerPage);
+  const totalPages = meta ? meta.total_pages : Math.ceil(sortedData.length / itemsPerPage);
+  const currentPage = meta ? meta.page : currentPage;
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -168,6 +177,22 @@ const DataTable: React.FC<DataTableProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length + (actions.length > 0 ? 1 : 0)} className="px-6 py-12 text-center">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-500">Loading...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : paginatedData.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + (actions.length > 0 ? 1 : 0)} className="px-6 py-12 text-center text-gray-500">
+                  No data available
+                </td>
+              </tr>
+            ) : (
             {paginatedData.map((row, index) => (
               <tr key={index} className="hover:bg-gray-50">
                 {columns.map((column) => (
@@ -196,16 +221,24 @@ const DataTable: React.FC<DataTableProps> = ({
                 )}
               </tr>
             ))}
+            )}
           </tbody>
         </table>
       </div>
 
-      {totalPages > 1 && (
+      {!loading && totalPages > 1 && (
         <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
           <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              {meta && (
+                <span>
+                  Showing {((meta.page - 1) * meta.page_size) + 1} to {Math.min(meta.page * meta.page_size, meta.total)} of {meta.total} results
+                </span>
+              )}
+            </div>
             <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto">
               <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                onClick={() => onPageChange ? onPageChange(Math.max(1, currentPage - 1)) : setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
                 className="px-2 sm:px-3 py-1 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               >
@@ -215,7 +248,7 @@ const DataTable: React.FC<DataTableProps> = ({
               {[...Array(totalPages)].map((_, i) => (
                 <button
                   key={i}
-                  onClick={() => setCurrentPage(i + 1)}
+                  onClick={() => onPageChange ? onPageChange(i + 1) : setCurrentPage(i + 1)}
                   className={`px-2 sm:px-3 py-1 text-sm rounded ${
                     currentPage === i + 1
                       ? 'bg-blue-600 text-white'
@@ -227,7 +260,7 @@ const DataTable: React.FC<DataTableProps> = ({
               ))}
               
               <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                onClick={() => onPageChange ? onPageChange(Math.min(totalPages, currentPage + 1)) : setCurrentPage(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage === totalPages}
                 className="px-2 sm:px-3 py-1 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               >

@@ -32,19 +32,15 @@ const LoginForm: React.FC = () => {
         setError('Invalid email/username or password');
       }
     } catch (err) {
-      setError('Login failed. Please try again.');
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   // Demo credentials helper
-  const setDemoCredentials = (role: 'admin' | 'employee') => {
-    const credentials = {
-      admin: { emailOrUsername: 'admin@construction.com', password: 'admin123' },
-      employee: { emailOrUsername: 'sarah@construction.com', password: 'employee123' }
-    };
-    setFormData(credentials[role]);
+  const setDemoCredentials = (username: string, password: string) => {
+    setFormData({ emailOrUsername: username, password });
   };
 
   return (
@@ -135,17 +131,17 @@ const LoginForm: React.FC = () => {
             <div className="space-y-2">
               <button
                 type="button"
-                onClick={() => setDemoCredentials('admin')}
+                onClick={() => setDemoCredentials('boss', 'password123')}
                 className="w-full text-left text-sm text-blue-600 hover:text-blue-800 transition-colors"
               >
-                👤 Admin: admin@construction.com
+                👤 Admin: boss / password123
               </button>
               <button
                 type="button"
-                onClick={() => setDemoCredentials('employee')}
+                onClick={() => setDemoCredentials('emp1', 'password123')}
                 className="w-full text-left text-sm text-blue-600 hover:text-blue-800 transition-colors"
               >
-                👤 Employee: sarah@construction.com
+                👤 Employee: emp1 / password123
               </button>
             </div>
           </div>

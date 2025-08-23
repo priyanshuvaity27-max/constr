@@ -267,6 +267,7 @@ export interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 export interface DashboardStats {
@@ -277,4 +278,35 @@ export interface DashboardStats {
   spaceRequirementChart: { [key: string]: number };
   leadsByCity: { [key: string]: number };
   monthlyLeads: { month: string; count: number }[];
+}
+
+export interface ApiFilters {
+  q?: string;
+  page?: number;
+  page_size?: number;
+  sort?: string;
+  sort_order?: 'asc' | 'desc';
+  [key: string]: any;
+}
+
+export interface ApiMeta {
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface Document {
+  id: string;
+  entity: string;
+  entity_id: string;
+  label: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
+  r2_key: string;
+  public_url?: string;
+  uploaded_by: string;
+  uploaded_by_name: string;
+  created_at: string;
 }

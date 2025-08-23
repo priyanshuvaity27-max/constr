@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuthContextType } from '../types';
+import { api, apiPost, ApiError } from '../lib/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -18,35 +19,51 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-    }
+    checkAuth();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Mock authentication - in real app, this would call an API
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const foundUser = users.find((u: User) => u.email === email);
-    
-    if (foundUser && foundUser.status === 'active') {
-      // In a real app, you'd verify the password hash
-      setUser(foundUser);
-      setIsAuthenticated(true);
-      localStorage.setItem('currentUser', JSON.stringify(foundUser));
-      return true;
+  const checkAuth = async () => {
+    try {
+      const response = await api<User>('/api/auth/me');
+      if (response.ok && response.data) {
+        setUser(response.data);
+        setIsAuthenticated(true);
+      }
+    } catch (error) {
+      // Not authenticated
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
     }
-    
-    return false;
+  };
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const response = await apiPost<{ user: User }>('/api/auth/login', {
+        username: email, // Backend expects username field
+        password
+      });
+      
+      if (response.ok && response.data) {
+        setUser(response.data.user);
+        setIsAuthenticated(true);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
   };
 
   const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('currentUser');
+    apiPost('/api/auth/logout').finally(() => {
+      setUser(null);
+      setIsAuthenticated(false);
+    });
   };
 
   const value: AuthContextType = {
@@ -54,6 +71,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     isAuthenticated,
+    loading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

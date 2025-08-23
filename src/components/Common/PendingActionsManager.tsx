@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Check, X, Clock, Eye, AlertCircle } from 'lucide-react';
 import { PendingAction } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { apiGet, apiPost, ApiError } from '../../lib/api';
 import Modal from './Modal';
 
 const PendingActionsManager: React.FC = () => {
   const { user } = useAuth();
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
@@ -15,58 +17,53 @@ const PendingActionsManager: React.FC = () => {
     loadPendingActions();
   }, []);
 
-  const loadPendingActions = () => {
-    const actions = JSON.parse(localStorage.getItem('pendingActions') || '[]');
-    setPendingActions(actions.filter((action: PendingAction) => action.status === 'pending'));
+  const loadPendingActions = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiGet<PendingAction[]>('/api/v1/pending-actions', {
+        status: 'pending'
+      });
+      if (response.ok && response.data) {
+        setPendingActions(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load pending actions:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
   };
 
-  const handleApprove = (actionId: string) => {
-    const actions = JSON.parse(localStorage.getItem('pendingActions') || '[]');
-    const action = actions.find((a: PendingAction) => a.id === actionId);
-    
-    if (action) {
-      // Apply the change to the actual data
-      const moduleData = JSON.parse(localStorage.getItem(action.module) || '[]');
+  const handleApprove = useCallback(async (actionId: string) => {
+    try {
+      await apiPost(`/api/v1/pending-actions/${actionId}/approve`, {
+        admin_notes: adminNotes
+      });
       
-      if (action.type === 'create') {
-        moduleData.push(action.data);
-      } else if (action.type === 'update') {
-        const index = moduleData.findIndex((item: any) => item.id === action.data.id);
-        if (index !== -1) {
-          moduleData[index] = action.data;
-        }
-      } else if (action.type === 'delete') {
-        const filteredData = moduleData.filter((item: any) => item.id !== action.data.id);
-        localStorage.setItem(action.module, JSON.stringify(filteredData));
-      }
-      
-      if (action.type !== 'delete') {
-        localStorage.setItem(action.module, JSON.stringify(moduleData));
-      }
-      
-      // Update action status
-      action.status = 'approved';
-      action.adminNotes = adminNotes;
-      localStorage.setItem('pendingActions', JSON.stringify(actions));
-      
-      loadPendingActions();
+      await loadPendingActions();
       setAdminNotes('');
+      alert('Action approved successfully!');
+    } catch (error) {
+      console.error('Failed to approve action:', error);
+      alert('Failed to approve action. Please try again.');
     }
-  };
+  }, [adminNotes, loadPendingActions]);
 
-  const handleReject = (actionId: string) => {
-    const actions = JSON.parse(localStorage.getItem('pendingActions') || '[]');
-    const action = actions.find((a: PendingAction) => a.id === actionId);
-    
-    if (action) {
-      action.status = 'rejected';
-      action.adminNotes = adminNotes;
-      localStorage.setItem('pendingActions', JSON.stringify(actions));
+  const handleReject = useCallback(async (actionId: string) => {
+    try {
+      await apiPost(`/api/v1/pending-actions/${actionId}/reject`, {
+        status: 'rejected',
+        admin_notes: adminNotes
+      });
       
-      loadPendingActions();
+      await loadPendingActions();
       setAdminNotes('');
+      alert('Action rejected successfully!');
+    } catch (error) {
+      console.error('Failed to reject action:', error);
+      alert('Failed to reject action. Please try again.');
     }
-  };
+  }, [adminNotes, loadPendingActions]);
 
   const getActionTypeColor = (type: string) => {
     switch (type) {
@@ -109,11 +106,18 @@ const PendingActionsManager: React.FC = () => {
       </div>
 
       {pendingActions.length === 0 ? (
+        loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading pending actions...</p>
+          </div>
+        ) : (
         <div className="text-center py-12">
           <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No Pending Actions</h3>
           <p className="text-gray-600">All employee requests have been processed.</p>
         </div>
+        )
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="divide-y divide-gray-200">

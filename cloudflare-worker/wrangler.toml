@@ -1,0 +1,18 @@
+name = "real-estate-db-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "real_estate_db"
+database_id = "your-database-id-here"
+
+[vars]
+ALLOWED_ORIGINS = "http://localhost:5173,https://your-frontend.com"
+
+[env.production.vars]
+ALLOWED_ORIGINS = "https://your-frontend.com"
+
+[observability]
+enabled = true

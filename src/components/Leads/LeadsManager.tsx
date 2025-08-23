@@ -1,15 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, Eye, FileText, Download, Upload } from 'lucide-react';
 import DataTable from '../Common/DataTable';
 import Modal from '../Common/Modal';
-import { Lead, User } from '../../types';
+import { Lead, User, ApiFilters } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { exportToCSV, downloadTemplate } from '../../utils/exportUtils';
+import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from '../../lib/api';
 
 const LeadsManager: React.FC = () => {
   const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<ApiFilters>({
+    page: 1,
+    page_size: 50,
+    sort: 'created_at',
+    sort_order: 'desc'
+  });
+  const [meta, setMeta] = useState({ total: 0, page: 1, page_size: 50, total_pages: 0 });
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -44,20 +52,40 @@ const LeadsManager: React.FC = () => {
 
   useEffect(() => {
     loadLeads();
-    loadUsers();
-  }, [user]);
+    if (user?.role === 'admin') {
+      loadUsers();
+    }
+  }, [filters]);
 
-  const loadLeads = () => {
-    const storedLeads: Lead[] = JSON.parse(localStorage.getItem('leads') || '[]');
-    const filteredLeads = user?.role === 'admin'
-      ? storedLeads
-      : storedLeads.filter(lead => lead.leadManagedBy === user?.id);
-    setLeads(filteredLeads);
+  const loadLeads = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiGet<Lead[]>('/api/v1/leads', filters);
+      if (response.ok && response.data) {
+        setLeads(response.data);
+        setMeta(response.meta || { total: 0, page: 1, page_size: 50, total_pages: 0 });
+      }
+    } catch (error) {
+      console.error('Failed to load leads:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
   };
 
-  const loadUsers = () => {
-    const storedUsers: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    setUsers(storedUsers.filter(u => u.status === 'active'));
+  const loadUsers = useCallback(async () => {
+    try {
+      const response = await apiGet<User[]>('/api/v1/users', { status: 'active' });
+      if (response.ok && response.data) {
+        setUsers(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+  }, []);
+
+  const updateFilters = useCallback((newFilters: Partial<ApiFilters>) => {
+    setFilters(prev => ({ ...prev, ...newFilters, page: 1 }));
   };
 
   const generateInquiryNo = () => {
@@ -80,79 +108,90 @@ const LeadsManager: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const allLeads: Lead[] = JSON.parse(localStorage.getItem('leads') || '[]');
-    const assignedUser = users.find(u => u.id === formData.leadManagedBy);
-
-    const leadData = {
-      ...formData,
-      leadManagerName: assignedUser?.name || '',
-      budget: formData.budget ? parseFloat(formData.budget) : undefined
-    };
-
-    if (editingLead) {
-      const updatedLeads = allLeads.map(lead =>
-        lead.id === editingLead.id ? { ...lead, ...leadData } : lead
-      );
-      localStorage.setItem('leads', JSON.stringify(updatedLeads));
-      setLeads(updatedLeads);
-    } else {
-      const newLead: Lead = {
-        id: Date.now().toString(),
-        ...leadData,
-        inquiryNo: formData.inquiryNo || generateInquiryNo(),
-        createdAt: new Date().toISOString().split('T')[0]
+    try {
+      const leadData = {
+        inquiry_no: formData.inquiryNo,
+        inquiry_date: formData.inquiryDate,
+        client_company: formData.clientCompany,
+        contact_person: formData.contactPerson,
+        contact_no: formData.contactNo,
+        email: formData.email,
+        designation: formData.designation,
+        department: formData.department,
+        description: formData.description,
+        type_of_place: formData.typeOfPlace,
+        space_requirement: formData.spaceRequirement,
+        transaction_type: formData.transactionType,
+        budget: formData.budget ? parseFloat(formData.budget) : null,
+        city: formData.city,
+        location_preference: formData.locationPreference,
+        assignee_id: formData.leadManagedBy || null
       };
-      allLeads.push(newLead);
-      localStorage.setItem('leads', JSON.stringify(allLeads));
-      setLeads(allLeads);
-    }
 
-    resetForm();
-    setShowModal(false);
+      if (editingLead) {
+        await apiPatch(`/api/v1/leads/${editingLead.id}`, leadData);
+      } else {
+        await apiPost('/api/v1/leads', leadData);
+      }
+
+      await loadLeads();
+      resetForm();
+      setShowModal(false);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'PENDING_APPROVAL') {
+        alert('Your request has been sent to admin for approval.');
+        resetForm();
+        setShowModal(false);
+      } else {
+        console.error('Failed to save lead:', error);
+        alert('Failed to save lead. Please try again.');
+      }
+    }
   };
 
-  const handleEdit = (lead: Lead) => {
+  const handleEdit = useCallback((lead: Lead) => {
     setEditingLead(lead);
     setFormData({
-      inquiryNo: lead.inquiryNo,
-      inquiryDate: lead.inquiryDate,
-      clientCompany: lead.clientCompany,
-      contactPerson: lead.contactPerson,
-      contactNo: lead.contactNo,
+      inquiryNo: lead.inquiry_no,
+      inquiryDate: lead.inquiry_date,
+      clientCompany: lead.client_company,
+      contactPerson: lead.contact_person,
+      contactNo: lead.contact_no,
       email: lead.email,
       designation: lead.designation || '',
       department: lead.department || '',
       description: lead.description || '',
-      typeOfPlace: lead.typeOfPlace,
-      spaceRequirement: lead.spaceRequirement || '',
-      transactionType: lead.transactionType,
+      typeOfPlace: lead.type_of_place,
+      spaceRequirement: lead.space_requirement || '',
+      transactionType: lead.transaction_type,
       budget: lead.budget?.toString() || '',
       city: lead.city || '',
-      locationPreference: lead.locationPreference || '',
-      firstContactDate: lead.firstContactDate || '',
-      leadManagedBy: lead.leadManagedBy,
-      status: lead.status,
-      optionShared: lead.optionShared,
-      lastContactDate: lead.lastContactDate || '',
-      nextActionPlan: lead.nextActionPlan || '',
-      actionDate: lead.actionDate || '',
-      remark: lead.remark || ''
+      locationPreference: lead.location_preference || '',
+      leadManagedBy: lead.assignee_id || '',
+      // Map other fields as needed
     });
     setShowModal(true);
-  };
+  }, []);
 
-  const handleDelete = (lead: Lead) => {
-    if (window.confirm('Are you sure you want to delete this lead?')) {
-      const allLeads: Lead[] = JSON.parse(localStorage.getItem('leads') || '[]');
-      const updatedLeads = allLeads.filter(l => l.id !== lead.id);
-      localStorage.setItem('leads', JSON.stringify(updatedLeads));
-      setLeads(updatedLeads);
+  const handleDelete = useCallback(async (lead: Lead) => {
+    if (!window.confirm('Are you sure you want to delete this lead?')) return;
+    
+    try {
+      await apiDelete(`/api/v1/leads/${lead.id}`);
+      await loadLeads();
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'PENDING_APPROVAL') {
+        alert('Delete request sent to admin for approval.');
+      } else {
+        console.error('Failed to delete lead:', error);
+        alert('Failed to delete lead. Please try again.');
+      }
     }
-  };
+  }, [loadLeads]);
 
   const handleViewDetails = (lead: Lead) => {
     setSelectedLead(lead);
@@ -189,8 +228,25 @@ const LeadsManager: React.FC = () => {
     setErrors({});
   };
 
-  const handleExport = () => {
-    exportToCSV(leads, 'leads.csv');
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/leads?format=csv&${new URLSearchParams(filters as any)}`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'leads.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    }
   };
 
   const handleImport = () => {
@@ -234,33 +290,85 @@ const LeadsManager: React.FC = () => {
     };
     input.click();
   };
+  // Add filter controls
+  const FilterControls = () => (
+    <div className="bg-white p-4 rounded-lg shadow mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+          <input
+            type="text"
+            value={filters.q || ''}
+            onChange={(e) => updateFilters({ q: e.target.value })}
+            placeholder="Search leads..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+          <input
+            type="text"
+            value={filters.city || ''}
+            onChange={(e) => updateFilters({ city: e.target.value })}
+            placeholder="Filter by city..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Type of Place</label>
+          <select
+            value={filters.type_of_place || ''}
+            onChange={(e) => updateFilters({ type_of_place: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          >
+            <option value="">All Types</option>
+            <option value="Office">Office</option>
+            <option value="Retail">Retail</option>
+            <option value="Warehouse">Warehouse</option>
+            <option value="Coworking">Coworking</option>
+            <option value="Industrial">Industrial</option>
+            <option value="Land">Land</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+          <select
+            value={filters.transaction_type || ''}
+            onChange={(e) => updateFilters({ transaction_type: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          >
+            <option value="">All Types</option>
+            <option value="Lease">Lease</option>
+            <option value="Buy">Buy</option>
+            <option value="Sell">Sell</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  );
 
   const columns = [
-    { key: 'inquiryNo', label: 'Inquiry No.', sortable: true },
-    { key: 'inquiryDate', label: 'Inquiry Date', sortable: true },
-    { key: 'clientCompany', label: 'Client Company', sortable: true },
-    { key: 'contactPerson', label: 'Contact Person', sortable: true },
-    { key: 'contactNo', label: 'Contact No.', sortable: true },
+    { key: 'inquiry_no', label: 'Inquiry No.', sortable: true },
+    { key: 'inquiry_date', label: 'Inquiry Date', sortable: true },
+    { key: 'client_company', label: 'Client Company', sortable: true },
+    { key: 'contact_person', label: 'Contact Person', sortable: true },
+    { key: 'contact_no', label: 'Contact No.', sortable: true },
     { key: 'email', label: 'Email', sortable: true },
-    { key: 'typeOfPlace', label: 'Type of Place', sortable: true },
-    { key: 'spaceRequirement', label: 'Space Requirement', sortable: true },
+    { key: 'type_of_place', label: 'Type of Place', sortable: true },
+    { key: 'space_requirement', label: 'Space Requirement', sortable: true },
     { key: 'city', label: 'City', sortable: true },
     {
-      key: 'status',
-      label: 'Status',
+      key: 'deal_closed',
+      label: 'Deal Status',
       sortable: true,
       render: (value: string) => (
         <span
           className={`px-2 py-1 text-xs font-medium rounded-full ${
-            value === 'New' ? 'bg-blue-100 text-blue-800' :
-            value === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-            value === 'Qualified' ? 'bg-green-100 text-green-800' :
-            value === 'Closed Won' ? 'bg-green-100 text-green-800' :
-            value === 'Follow Up' ? 'bg-orange-100 text-orange-800' :
-            'bg-red-100 text-red-800'
+            value === 'Yes' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
           }`}
         >
-          {value}
+          {value === 'Yes' ? 'Closed' : 'Open'}
         </span>
       )
     }
@@ -274,6 +382,8 @@ const LeadsManager: React.FC = () => {
 
   return (
     <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+      <FilterControls />
+      
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Lead Tracker</h1>
@@ -319,10 +429,13 @@ const LeadsManager: React.FC = () => {
           data={leads}
           columns={columns}
           actions={actions}
-          searchable={true}
+          searchable={false}
           exportable={false}
           importable={false}
           title="All Leads"
+          loading={loading}
+          meta={meta}
+          onPageChange={(page) => updateFilters({ page })}
         />
       </div>
 
