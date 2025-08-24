@@ -55,14 +55,6 @@ export interface Lead {
   updated_at?: string;
 }
 
-export interface AuthContextType {
-  user: User | null;
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  isAuthenticated: boolean;
-  loading: boolean;
-}
-
 export interface ApiFilters {
   q?: string;
   page?: number;
@@ -92,4 +84,174 @@ export interface Document {
   uploaded_by: string;
   uploaded_by_name?: string;
   created_at: string;
+}
+
+export interface Developer {
+  id: string;
+  type: 'corporate' | 'coworking' | 'warehouse' | 'mall';
+  name: string;
+  grade: 'A' | 'B' | 'C';
+  contactNo: string;
+  emailId: string;
+  websiteLink: string;
+  linkedinLink?: string;
+  hoCity: string;
+  presenceCities?: string;
+  noOfBuildings?: number;
+  noOfCoworking?: number;
+  noOfWarehouses?: number;
+  noOfMalls?: number;
+  buildingListLink?: string;
+  contactListLink?: string;
+  createdAt: string;
+}
+
+export interface Contact {
+  id: string;
+  type: ContactType;
+  companyName?: string;
+  industry?: string;
+  department?: string;
+  developerName?: string;
+  contactType?: string;
+  individualOwnerName?: string;
+  ownerType?: string;
+  departmentDesignation?: string;
+  firstName: string;
+  lastName: string;
+  designation?: string;
+  contactNo: string;
+  alternateNo?: string;
+  emailId: string;
+  linkedinLink?: string;
+  city?: string;
+  location?: string;
+}
+
+export type ContactType = 'Client' | 'Developer' | 'Individual Owner' | 'Land Acquisition' | 'Others';
+
+export interface LandParcel {
+  id: string;
+  landParcelName: string;
+  location: string;
+  city: string;
+  googleLocation?: string;
+  areaInSqm: number;
+  zone: 'Commercial' | 'Residential' | 'Industrial' | 'Mixed Use';
+  title: string;
+  roadWidth?: string;
+  connectivity?: string;
+  advantages?: string;
+  documents?: Record<string, { uploaded: boolean; fileName: string }>;
+  createdAt: string;
+}
+
+export interface ProjectMaster {
+  id: string;
+  type: 'corporate_building' | 'coworking_space' | 'warehouse' | 'retail_mall';
+  name: string;
+  grade: 'A' | 'B' | 'C';
+  developerOwner: string;
+  contactNo: string;
+  alternateNo?: string;
+  email: string;
+  city: string;
+  location: string;
+  landmark?: string;
+  googleLocation?: string;
+  noOfFloors?: number;
+  floorPlate?: string;
+  noOfSeats?: number;
+  availabilityOfSeats?: number;
+  perOpenDeskCost?: number;
+  perDedicatedDeskCost?: number;
+  setupFees?: number;
+  noOfWarehouses?: number;
+  warehouseSize?: string;
+  totalArea?: string;
+  efficiency?: string;
+  floorPlateArea?: string;
+  rentPerSqft: number;
+  camPerSqft: number;
+  amenities?: string;
+  remark?: string;
+  status: 'Active' | 'Inactive' | 'Under Construction';
+  createdAt: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  type: 'corporate_building' | 'coworking_space' | 'warehouse' | 'retail_mall';
+  name: string;
+  grade: 'A' | 'B' | 'C';
+  developerOwnerName: string;
+  contactNo: string;
+  alternateContactNo?: string;
+  emailId: string;
+  city: string;
+  location: string;
+  googleLocation?: string;
+  saleableArea?: string;
+  carpetArea?: string;
+  noOfSaleableSeats?: number;
+  floor: string;
+  height?: string;
+  typeOfFlooring?: string;
+  flooringSize?: string;
+  sideHeight?: string;
+  centreHeight?: string;
+  canopy?: string;
+  fireSprinklers?: string;
+  frontage?: string;
+  terrace?: string;
+  specification: string;
+  status: 'Available' | 'Occupied' | 'Under Maintenance';
+  rentPerSqft?: number;
+  costPerSeat?: number;
+  camPerSqft?: number;
+  setupFeesInventory?: number;
+  agreementPeriod: string;
+  lockInPeriod: string;
+  noOfCarParks: number;
+  createdAt: string;
+}
+
+export interface Entity {
+  id: string;
+  type: 'Project' | 'Property' | 'Site Visit' | 'Task';
+  name: string;
+  location: string;
+  area: string;
+  developer: string;
+  developerName?: string;
+  startDate: string;
+  endDate: string;
+  status: 'Planning' | 'Ongoing' | 'Completed' | 'On Hold';
+  description: string;
+  budget?: number;
+  createdAt: string;
+}
+
+export interface Enquiry {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  message: string;
+  source: 'Website' | 'Phone' | 'Email' | 'Walk-in';
+  status: 'New' | 'Contacted' | 'Qualified' | 'Converted' | 'Closed';
+  assignedTo?: string;
+  assignedToName?: string;
+  dateOfEnquiry: string;
+  createdAt: string;
+}
+
+export interface DashboardStats {
+  totalLeads: number;
+  totalDevelopers: number;
+  activeInventory: number;
+  leadsByStatus: { [key: string]: number };
+  spaceRequirementChart: { [key: string]: number };
+  leadsByCity: { [key: string]: number };
+  monthlyLeads: { month: string; count: number }[];
 }

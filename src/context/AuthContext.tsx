@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthContextType } from '../types';
 import { api, apiPost, ApiError } from '../lib/api';
 
 interface User {
@@ -12,6 +11,14 @@ interface User {
   status: string;
   created_at: string;
   updated_at?: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

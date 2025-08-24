@@ -105,7 +105,7 @@ function buildWhereClause(filters: any, allowedColumns: string[]): { where: stri
         ['name', 'username', 'email', 'client_company', 'contact_person', 'city', 'location'].includes(col)
       );
       if (searchColumns.length > 0) {
-        const searchConditions = searchColumns.map(() => `${searchColumns.shift()} LIKE ?`);
+        const searchConditions = searchColumns.map(col => `${col} LIKE ?`);
         conditions.push(`(${searchConditions.join(' OR ')})`);
         searchColumns.forEach(() => params.push(`%${value}%`));
       }

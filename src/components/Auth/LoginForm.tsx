@@ -147,6 +147,13 @@ const LoginForm: React.FC = () => {
               >
                 👤 Employee: emp1 / password123
               </button>
+              <button
+                type="button"
+                onClick={() => setDemoCredentials('emp2', 'password123')}
+                className="w-full text-left text-sm text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                👤 Employee: emp2 / password123
+              </button>
             </div>
           </div>
         </div>
