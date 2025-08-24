@@ -27,12 +27,16 @@ const LoginForm: React.FC = () => {
     setError('');
 
     try {
-      const success = await login(formData.emailOrUsername, formData.password);
+      const success = await login(formData.emailOrUsername.trim(), formData.password);
       if (!success) {
         setError('Invalid email/username or password');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

@@ -14,7 +14,6 @@ import InventoryManager from './components/Inventory/InventoryManager';
 import UsersManager from './components/Users/UsersManager';
 import Settings from './components/Settings/Settings';
 import PendingActionsManager from './components/Common/PendingActionsManager';
-import { initializeMockData } from './utils/mockData';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
