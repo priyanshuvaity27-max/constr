@@ -7,25 +7,25 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     ENVIRONMENT: str = "development"
     
+    # Database
+    DATABASE_URL: str = "postgresql://user:password@localhost:5432/real_estate_crm"
+    
     # Security
     JWT_SECRET: str
     JWT_ISSUER: str = "real-estate-crm"
     JWT_AUDIENCE: str = "real-estate-crm"
     JWT_EXPIRES_MIN: int = 480  # 8 hours
     
-    # Allowed users (hardcoded)
-    ALLOWED_USERNAMES: List[str] = ["boss", "emp1", "emp2", "emp3", "emp4", "emp5"]
+    # AWS S3 (Optional - for file storage)
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_BUCKET_NAME: Optional[str] = None
+    AWS_REGION: str = "us-east-1"
     
-    # Cloudflare Worker (DB Proxy)
-    WORKER_BASE: str
-    WORKER_HMAC_SECRET: str
-    
-    # Cloudflare R2 Storage
-    R2_ENDPOINT: str
-    R2_ACCOUNT_ID: str
-    R2_ACCESS_KEY_ID: str
-    R2_SECRET_ACCESS_KEY: str
-    R2_BUCKET: str = "real-estate-documents"
+    # Supabase Storage (Alternative to S3)
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_KEY: Optional[str] = None
+    SUPABASE_BUCKET: str = "documents"
     
     # CORS & Security
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]

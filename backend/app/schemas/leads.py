@@ -72,12 +72,16 @@ class LeadUpdate(BaseModel):
 class LeadResponse(LeadBase):
     id: str
     owner_id: str
+    status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
     
     # Joined fields
     owner_name: Optional[str] = None
     assignee_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 class LeadsListResponse(BaseModel):
     ok: bool = True

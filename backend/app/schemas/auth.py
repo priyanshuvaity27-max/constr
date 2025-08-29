@@ -17,6 +17,9 @@ class UserResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
+    class Config:
+        from_attributes = True
+
 class LoginResponse(BaseModel):
     ok: bool = True
     user: UserResponse

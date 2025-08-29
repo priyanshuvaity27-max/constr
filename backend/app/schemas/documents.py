@@ -9,7 +9,7 @@ class DocumentBase(BaseModel):
     filename: str
     content_type: str
     file_size: int
-    r2_key: str
+    file_path: str
     public_url: Optional[str] = None
 
 class DocumentCreate(DocumentBase):
@@ -20,6 +20,9 @@ class DocumentResponse(DocumentBase):
     uploaded_by: str
     uploaded_by_name: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class DocumentsListResponse(BaseModel):
     ok: bool = True

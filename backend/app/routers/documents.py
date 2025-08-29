@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, Request
+from sqlalchemy.orm import Session
 from typing import Optional
+from app.database import get_db
+from app.models import Document
 from app.schemas.documents import DocumentResponse, DocumentsListResponse
 from app.schemas.auth import UserResponse
-from app.clients.d1_client import d1_client
-from app.clients.r2_client import r2_client
 from app.deps import require_auth
-from app.utils.ids import generate_id
+from app.services.file_storage import upload_file, delete_file
 from app.utils.errors import AppException
 import os
 
@@ -18,17 +19,51 @@ async def list_documents(
     entity_id: Optional[str] = Query(None, description="Filter by entity ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_auth)
 ):
-    filters = {
-        "entity": entity,
-        "entity_id": entity_id,
-        "page": page,
-        "page_size": page_size
-    }
+    query = db.query(Document)
     
-    result = await d1_client.documents_list(filters)
-    return DocumentsListResponse(data=result["documents"], meta=result["meta"])
+    # Apply filters
+    if entity:
+        query = query.filter(Document.entity == entity)
+    if entity_id:
+        query = query.filter(Document.entity_id == entity_id)
+    
+    # Count total
+    total = query.count()
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    documents = query.offset(offset).limit(page_size).all()
+    
+    # Convert to response format
+    doc_responses = []
+    for doc in documents:
+        doc_responses.append(DocumentResponse(
+            id=str(doc.id),
+            entity=doc.entity,
+            entity_id=str(doc.entity_id),
+            label=doc.label,
+            filename=doc.filename,
+            content_type=doc.content_type,
+            file_size=doc.file_size,
+            file_path=doc.file_path,
+            public_url=doc.public_url,
+            uploaded_by=str(doc.uploaded_by),
+            uploaded_by_name=doc.uploaded_by_name,
+            created_at=doc.created_at
+        ))
+    
+    return DocumentsListResponse(
+        data=doc_responses,
+        meta={
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size
+        }
+    )
 
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
@@ -36,6 +71,7 @@ async def upload_document(
     entity: str = Form(...),
     entity_id: str = Form(...),
     label: str = Form(...),
+    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_auth)
 ):
     # Validate file
@@ -56,74 +92,75 @@ async def upload_document(
             status_code=400
         )
     
-    # Generate R2 key
-    file_extension = os.path.splitext(file.filename)[1]
-    r2_key = f"{entity}/{entity_id}/{generate_id()}{file_extension}"
-    
-    # Upload to R2
-    from io import BytesIO
-    file_stream = BytesIO(file_content)
-    
-    public_url = await r2_client.upload_file(
-        key=r2_key,
-        file_data=file_stream,
+    # Upload file
+    file_path, public_url = await upload_file(
+        file_content=file_content,
+        filename=file.filename,
         content_type=file.content_type or "application/octet-stream",
-        metadata={
-            "uploaded_by": current_user.id,
-            "entity": entity,
-            "entity_id": entity_id,
-            "label": label
-        }
+        entity=entity,
+        entity_id=entity_id
     )
     
     # Save document record
-    document_data = {
-        "id": generate_id(),
-        "entity": entity,
-        "entity_id": entity_id,
-        "label": label,
-        "filename": file.filename,
-        "content_type": file.content_type or "application/octet-stream",
-        "file_size": len(file_content),
-        "r2_key": r2_key,
-        "public_url": public_url,
-        "uploaded_by": current_user.id,
-        "uploaded_by_name": current_user.name
-    }
+    document = Document(
+        entity=entity,
+        entity_id=entity_id,
+        label=label,
+        filename=file.filename,
+        content_type=file.content_type or "application/octet-stream",
+        file_size=len(file_content),
+        file_path=file_path,
+        public_url=public_url,
+        uploaded_by=current_user.id,
+        uploaded_by_name=current_user.name
+    )
     
-    result = await d1_client.documents_create(document_data)
-    return DocumentResponse(**result["document"])
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    
+    return DocumentResponse(
+        id=str(document.id),
+        entity=document.entity,
+        entity_id=str(document.entity_id),
+        label=document.label,
+        filename=document.filename,
+        content_type=document.content_type,
+        file_size=document.file_size,
+        file_path=document.file_path,
+        public_url=document.public_url,
+        uploaded_by=str(document.uploaded_by),
+        uploaded_by_name=document.uploaded_by_name,
+        created_at=document.created_at
+    )
 
 @router.delete("/documents/{document_id}")
 async def delete_document(
     document_id: str,
+    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_auth)
 ):
-    # Get document
-    documents_result = await d1_client.documents_list({"id": document_id})
-    documents = documents_result.get("documents", [])
-    
-    if not documents:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
         raise AppException(
             code="DOCUMENT_NOT_FOUND",
             message="Document not found",
             status_code=404
         )
     
-    document = documents[0]
-    
     # Check permissions (admin or uploader)
-    if current_user.role != "admin" and document["uploaded_by"] != current_user.id:
+    if current_user.role != "admin" and str(document.uploaded_by) != current_user.id:
         raise AppException(
             code="PERMISSION_DENIED",
             message="Access denied",
             status_code=403
         )
     
-    # Delete from R2
-    await r2_client.delete_file(document["r2_key"])
+    # Delete file from storage
+    await delete_file(document.file_path)
     
     # Delete from database
-    await d1_client.documents_delete(document_id)
+    db.delete(document)
+    db.commit()
     
     return {"ok": True, "message": "Document deleted successfully"}

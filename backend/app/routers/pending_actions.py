@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy.orm import Session
 from typing import Optional
+from app.database import get_db
+from app.models import PendingAction, User, Lead
 from app.schemas.pending_actions import PendingActionUpdate, PendingActionResponse, PendingActionsListResponse
 from app.schemas.auth import UserResponse
-from app.clients.d1_client import d1_client
 from app.deps import require_auth, require_admin
-from app.services.approvals import apply_pending_action
 from app.utils.errors import AppException
+import json
 
 router = APIRouter()
 
@@ -20,84 +22,122 @@ async def list_pending_actions(
     page_size: int = Query(50, ge=1, le=100),
     sort: Optional[str] = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_auth)
 ):
-    filters = {
-        "status": status,
-        "module": module,
-        "type": type,
-        "page": page,
-        "page_size": page_size,
-        "sort": sort,
-        "sort_order": sort_order
-    }
+    query = db.query(PendingAction)
     
     # Non-admin users can only see their own requests
     if current_user.role != "admin":
-        filters["requested_by"] = current_user.id
+        query = query.filter(PendingAction.requested_by == current_user.id)
     elif requested_by:
-        filters["requested_by"] = requested_by
+        query = query.filter(PendingAction.requested_by == requested_by)
     
-    result = await d1_client.pending_actions_list(filters)
-    return PendingActionsListResponse(data=result["pending_actions"], meta=result["meta"])
-
-@router.get("/{action_id}", response_model=PendingActionResponse)
-async def get_pending_action(
-    action_id: str,
-    current_user: UserResponse = Depends(require_auth)
-):
-    action_data = await d1_client.pending_actions_get_by_id(action_id)
-    if not action_data:
-        raise AppException(
-            code="ACTION_NOT_FOUND",
-            message="Pending action not found",
-            status_code=404
-        )
+    # Apply filters
+    if status:
+        query = query.filter(PendingAction.status == status)
+    if module:
+        query = query.filter(PendingAction.module == module)
+    if type:
+        query = query.filter(PendingAction.type == type)
     
-    # Check permissions
-    if current_user.role != "admin" and action_data["requested_by"] != current_user.id:
-        raise AppException(
-            code="PERMISSION_DENIED",
-            message="Access denied",
-            status_code=403
-        )
+    # Count total
+    total = query.count()
     
-    return PendingActionResponse(**action_data)
+    # Apply sorting
+    if hasattr(PendingAction, sort):
+        order_column = getattr(PendingAction, sort)
+        if sort_order == "desc":
+            query = query.order_by(order_column.desc())
+        else:
+            query = query.order_by(order_column.asc())
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    actions = query.offset(offset).limit(page_size).all()
+    
+    # Convert to response format
+    action_responses = []
+    for action in actions:
+        action_responses.append(PendingActionResponse(
+            id=str(action.id),
+            module=action.module.value,
+            type=action.type.value,
+            data=json.loads(action.data),
+            target_id=str(action.target_id) if action.target_id else None,
+            requested_by=str(action.requested_by),
+            requested_by_name=action.requested_by_name,
+            status=action.status.value,
+            admin_notes=action.admin_notes,
+            approved_by=str(action.approved_by) if action.approved_by else None,
+            approved_by_name=action.approved_by_name,
+            created_at=action.created_at,
+            updated_at=action.updated_at
+        ))
+    
+    return PendingActionsListResponse(
+        data=action_responses,
+        meta={
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size
+        }
+    )
 
 @router.post("/{action_id}/approve")
 async def approve_pending_action(
     action_id: str,
     admin_notes: Optional[str] = None,
+    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_admin)
 ):
-    # Get the pending action
-    action_data = await d1_client.pending_actions_get_by_id(action_id)
-    if not action_data:
+    action = db.query(PendingAction).filter(PendingAction.id == action_id).first()
+    if not action:
         raise AppException(
             code="ACTION_NOT_FOUND",
             message="Pending action not found",
             status_code=404
         )
     
-    if action_data["status"] != "pending":
+    if action.status.value != "pending":
         raise AppException(
             code="ACTION_ALREADY_PROCESSED",
             message="Action has already been processed",
             status_code=400
         )
     
-    # Apply the action
-    await apply_pending_action(action_data, current_user)
+    # Apply the action based on module and type
+    data = json.loads(action.data)
+    
+    if action.module.value == "leads":
+        if action.type.value == "create":
+            # Create the lead
+            db_lead = Lead(
+                inquiry_no=data.get("inquiry_no") or generate_inquiry_no(),
+                owner_id=action.requested_by,
+                **{k: v for k, v in data.items() if k != "inquiry_no"}
+            )
+            db.add(db_lead)
+        elif action.type.value == "update" and action.target_id:
+            # Update the lead
+            lead = db.query(Lead).filter(Lead.id == action.target_id).first()
+            if lead:
+                for field, value in data.items():
+                    setattr(lead, field, value)
+        elif action.type.value == "delete" and action.target_id:
+            # Delete the lead
+            lead = db.query(Lead).filter(Lead.id == action.target_id).first()
+            if lead:
+                db.delete(lead)
     
     # Update action status
-    update_data = {
-        "status": "approved",
-        "admin_notes": admin_notes,
-        "approved_by": current_user.id,
-        "approved_by_name": current_user.name
-    }
+    action.status = "approved"
+    action.admin_notes = admin_notes
+    action.approved_by = current_user.id
+    action.approved_by_name = current_user.name
     
-    await d1_client.pending_actions_update(action_id, update_data)
+    db.commit()
     
     return {"ok": True, "message": "Action approved and applied successfully"}
 
@@ -105,18 +145,18 @@ async def approve_pending_action(
 async def reject_pending_action(
     action_id: str,
     action_update: PendingActionUpdate,
+    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(require_admin)
 ):
-    # Get the pending action
-    action_data = await d1_client.pending_actions_get_by_id(action_id)
-    if not action_data:
+    action = db.query(PendingAction).filter(PendingAction.id == action_id).first()
+    if not action:
         raise AppException(
             code="ACTION_NOT_FOUND",
             message="Pending action not found",
             status_code=404
         )
     
-    if action_data["status"] != "pending":
+    if action.status.value != "pending":
         raise AppException(
             code="ACTION_ALREADY_PROCESSED",
             message="Action has already been processed",
@@ -124,13 +164,11 @@ async def reject_pending_action(
         )
     
     # Update action status
-    update_data = {
-        "status": "rejected",
-        "admin_notes": action_update.admin_notes,
-        "approved_by": current_user.id,
-        "approved_by_name": current_user.name
-    }
+    action.status = "rejected"
+    action.admin_notes = action_update.admin_notes
+    action.approved_by = current_user.id
+    action.approved_by_name = current_user.name
     
-    await d1_client.pending_actions_update(action_id, update_data)
+    db.commit()
     
     return {"ok": True, "message": "Action rejected successfully"}

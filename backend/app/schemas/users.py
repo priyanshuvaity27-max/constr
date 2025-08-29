@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from datetime import datetime
-from app.config import settings
 
 class UserBase(BaseModel):
     username: str
@@ -21,12 +20,6 @@ class UserBase(BaseModel):
     def validate_status(cls, v):
         if v not in ["active", "inactive"]:
             raise ValueError("Status must be active or inactive")
-        return v
-    
-    @validator("username")
-    def validate_username(cls, v):
-        if v not in settings.ALLOWED_USERNAMES:
-            raise ValueError(f"Username must be one of: {settings.ALLOWED_USERNAMES}")
         return v
 
 class UserCreate(UserBase):
@@ -68,6 +61,9 @@ class UserResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
 
 class UsersListResponse(BaseModel):
     ok: bool = True

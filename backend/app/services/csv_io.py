@@ -1,7 +1,6 @@
 import csv
 import io
 from typing import List, Dict, Any
-from fastapi import Response
 from fastapi.responses import StreamingResponse
 
 def export_to_csv(data: List[Dict[str, Any]], filename: str) -> StreamingResponse:

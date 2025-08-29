@@ -46,9 +46,9 @@ class PendingActionResponse(PendingActionBase):
     approved_by_name: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    # For updates, include current data for diff
-    current_data: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
 
 class PendingActionsListResponse(BaseModel):
     ok: bool = True
