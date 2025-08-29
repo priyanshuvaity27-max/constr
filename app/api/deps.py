@@ -1,33 +1,74 @@
-from typing import Generator
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
+from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.security import verify_token
+from app.core.security import get_token_from_request, verify_token
 from app.models.user import User
+from app.utils.errors import AppException
 
-security = HTTPBearer()
 
 
-def get_current_user(
+async def get_current_user(
+    request: Request,
     db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> User:
-    token = credentials.credentials
-    user_id = verify_token(token)
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+) -> Optional[User]:
+    token = get_token_from_request(request)
+    if not token:
+        return None
     
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+    payload = verify_token(token)
+    if not payload:
+        return None
+    
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or user.status.value != "active":
+            return None
+        
+        return user
+    except Exception:
+        return None
+
+
+async def require_auth(request: Request, db: Session = Depends(get_db)) -> User:
+    user = await get_current_user(request, db)
+    if not user:
+        raise AppException(
+            code="UNAUTHORIZED",
+            message="Authentication required",
+            status_code=status.HTTP_401_UNAUTHORIZED
         )
+    return user
+
+
+async def require_admin(request: Request, db: Session = Depends(get_db)) -> User:
+    user = await require_auth(request, db)
+    if user.role.value != "admin":
+        raise AppException(
+            code="PERMISSION_DENIED",
+            message="Admin access required",
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    return user
+
+
+def check_ownership_or_admin(user: User, resource_owner_id: str) -> bool:
+    return user.role.value == "admin" or str(user.id) == str(resource_owner_id)
+
+
+# Legacy function for backward compatibility
+def get_admin_user(current_user: User = Depends(require_auth)) -> User:
+    if current_user.role.value != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    return current_user
+
     
     if user.status.value != "active":
         raise HTTPException(

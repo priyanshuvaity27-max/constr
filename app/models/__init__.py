@@ -6,6 +6,7 @@ from .project import ProjectMaster
 from .inventory import InventoryItem
 from .land import LandParcel
 from .pending_action import PendingAction
+from .document import Document
 
 __all__ = [
     "User",
@@ -15,5 +16,6 @@ __all__ = [
     "ProjectMaster",
     "InventoryItem",
     "LandParcel",
-    "PendingAction"
+    "PendingAction",
+    "Document"
 ]

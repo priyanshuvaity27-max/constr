@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -6,16 +6,18 @@ from fastapi.staticfiles import StaticFiles
 import time
 import uuid
 import os
-from app.config import settings
-from app.routers import (
-    auth, users, leads, developers, projects, 
-    inventory, land, contacts, pending_actions, documents
-)
+from app.core.config import settings
+from app.api.v1.api import api_router
+from app.core.database import engine
+from app.models import Base
 from app.utils.logging import setup_logging, logger
 from app.utils.errors import AppException
 
 # Setup logging
 setup_logging()
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Real Estate CRM API",
@@ -26,7 +28,8 @@ app = FastAPI(
 )
 
 # Security middleware
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+if not settings.DEBUG:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 # CORS middleware
 app.add_middleware(
@@ -37,8 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files for local file uploads (if not using S3)
-if not settings.AWS_ACCESS_KEY_ID:
+# Mount static files for local file uploads (fallback if not using S3/Supabase)
+if not settings.aws_access_key_id and not settings.supabase_url:
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
@@ -83,17 +86,8 @@ async def app_exception_handler(request: Request, exc: AppException):
         }
     )
 
-# Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
-app.include_router(leads.router, prefix="/api/v1/leads", tags=["leads"])
-app.include_router(developers.router, prefix="/api/v1/developers", tags=["developers"])
-app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
-app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])
-app.include_router(land.router, prefix="/api/v1/land", tags=["land"])
-app.include_router(contacts.router, prefix="/api/v1/contacts", tags=["contacts"])
-app.include_router(pending_actions.router, prefix="/api/v1/pending-actions", tags=["pending-actions"])
-app.include_router(documents.router, prefix="/api/v1", tags=["documents"])
+# Include API routes
+app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

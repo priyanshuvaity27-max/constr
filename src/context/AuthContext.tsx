@@ -46,9 +46,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      const response = await api<{ user: User }>('/api/auth/me');
+      const response = await api<User>('/api/v1/auth/me');
       if (response.ok && response.data) {
-        setUser(response.data.user);
+        setUser(response.data);
         setIsAuthenticated(true);
       }
     } catch (error) {
@@ -59,9 +59,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(false);
     }
   };
+  
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const response = await apiPost<{ user: User }>('/api/auth/login', {
+      const response = await apiPost<{ user: User }>('/api/v1/auth/login', {
         username: email,
         password
       });
@@ -79,7 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
-    apiPost('/api/auth/logout').finally(() => {
+    apiPost('/api/v1/auth/logout').finally(() => {
       setUser(null);
       setIsAuthenticated(false);
     });

@@ -8,10 +8,10 @@ import { apiGet, apiPost, ApiError } from '../../lib/api';
 
 const PendingActionsManager: React.FC = () => {
   const { user } = useAuth();
-  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const [pendingActions, setPendingActions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
+  const [selectedAction, setSelectedAction] = useState<any | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approvalType, setApprovalType] = useState<'approve' | 'reject'>('approve');
@@ -26,9 +26,9 @@ const PendingActionsManager: React.FC = () => {
   const loadPendingActions = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiGet<{ data: PendingAction[]; meta: any }>('/api/v1/pending-actions', filters);
+      const response = await apiGet('/api/v1/pending-actions', filters);
       if (response.ok && response.data) {
-        setPendingActions(response.data.data);
+        setPendingActions(response.data);
       }
     } catch (error) {
       console.error('Failed to load pending actions:', error);
@@ -41,19 +41,19 @@ const PendingActionsManager: React.FC = () => {
     loadPendingActions();
   }, [loadPendingActions]);
 
-  const handleViewDetails = useCallback((action: PendingAction) => {
+  const handleViewDetails = useCallback((action: any) => {
     setSelectedAction(action);
     setShowDetailsModal(true);
   }, []);
 
-  const handleApprove = useCallback((action: PendingAction) => {
+  const handleApprove = useCallback((action: any) => {
     setSelectedAction(action);
     setApprovalType('approve');
     setApprovalNotes('');
     setShowApprovalModal(true);
   }, []);
 
-  const handleReject = useCallback((action: PendingAction) => {
+  const handleReject = useCallback((action: any) => {
     setSelectedAction(action);
     setApprovalType('reject');
     setApprovalNotes('');
@@ -126,7 +126,12 @@ const PendingActionsManager: React.FC = () => {
       )
     },
     { key: 'requested_by_name', label: 'Requested By', sortable: true },
-    { key: 'created_at', label: 'Requested At', sortable: true },
+    { 
+      key: 'created_at', 
+      label: 'Requested At', 
+      sortable: true,
+      render: (value: string) => new Date(value).toLocaleDateString()
+    },
     { 
       key: 'status', 
       label: 'Status', 
@@ -173,7 +178,7 @@ const PendingActionsManager: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">

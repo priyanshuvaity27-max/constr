@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, Request
 from sqlalchemy.orm import Session
-from typing import Optional
-from app.database import get_db
-from app.models import Document
-from app.schemas.documents import DocumentResponse, DocumentsListResponse
+from typing import Optional, List
+from app.core.database import get_db
+from app.models.document import Document
+from app.schemas.document import DocumentResponse, DocumentsListResponse
 from app.schemas.auth import UserResponse
-from app.deps import require_auth
-from app.services.file_storage import upload_file, delete_file
+from app.api.deps import require_auth
+from app.services.file_upload import file_upload_service
 from app.utils.errors import AppException
-import os
+import uuid
 
 router = APIRouter()
 
@@ -92,25 +92,23 @@ async def upload_document(
             status_code=400
         )
     
+    # Reset file position for upload service
+    await file.seek(0)
+    
     # Upload file
-    file_path, public_url = await upload_file(
-        file_content=file_content,
-        filename=file.filename,
-        content_type=file.content_type or "application/octet-stream",
-        entity=entity,
-        entity_id=entity_id
-    )
+    file_url = await file_upload_service.upload_file(file, f"{entity}/{entity_id}")
     
     # Save document record
     document = Document(
+        id=str(uuid.uuid4()),
         entity=entity,
         entity_id=entity_id,
         label=label,
         filename=file.filename,
         content_type=file.content_type or "application/octet-stream",
         file_size=len(file_content),
-        file_path=file_path,
-        public_url=public_url,
+        file_path=file_url,
+        public_url=file_url,
         uploaded_by=current_user.id,
         uploaded_by_name=current_user.name
     )
@@ -157,7 +155,7 @@ async def delete_document(
         )
     
     # Delete file from storage
-    await delete_file(document.file_path)
+    file_upload_service.delete_file(document.file_path)
     
     # Delete from database
     db.delete(document)

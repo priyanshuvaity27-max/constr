@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, users, leads, developers, contacts, projects, inventory, land, pending_actions
+from app.api.v1.endpoints import auth, users, leads, developers, contacts, projects, inventory, land, pending_actions, documents
 
 api_router = APIRouter()
 
@@ -12,3 +12,4 @@ api_router.include_router(projects.router, prefix="/projects", tags=["projects"]
 api_router.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 api_router.include_router(land.router, prefix="/land", tags=["land"])
 api_router.include_router(pending_actions.router, prefix="/pending-actions", tags=["pending-actions"])
+api_router.include_router(documents.router, tags=["documents"])

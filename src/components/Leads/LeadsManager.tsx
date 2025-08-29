@@ -4,7 +4,7 @@ import DataTable from '../Common/DataTable';
 import Modal from '../Common/Modal';
 import { Lead, PendingAction } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from '../../lib/api';
+import { apiGet, apiPost, apiPatch, apiDelete, apiUpload, ApiError } from '../../lib/api';
 
 interface FormData {
   inquiryNo: string;
@@ -16,17 +16,19 @@ interface FormData {
   designation: string;
   department: string;
   description: string;
-  typeOfPlace: Lead['type_of_place'];
+  typeOfPlace: 'Office' | 'Retail' | 'Warehouse' | 'Coworking' | 'Industrial' | 'Land' | 'Other';
   spaceRequirement: string;
-  transactionType: Lead['transaction_type'];
+  transactionType: 'Lease' | 'Buy' | 'Sell';
   budget: string;
   city: string;
   locationPreference: string;
-  siteVisitRequired: 'Yes' | 'No';
-  proposalSubmitted: 'Yes' | 'No';
-  shortlisted: 'Yes' | 'No';
-  dealClosed: 'Yes' | 'No';
-  assigneeId: string;
+  firstContactDate: string;
+  status: string;
+  optionShared: 'Yes' | 'No';
+  lastContactDate: string;
+  nextActionPlan: string;
+  actionDate: string;
+  remark: string;
 }
 
 const initialFormData: FormData = {
@@ -45,21 +47,23 @@ const initialFormData: FormData = {
   budget: '',
   city: '',
   locationPreference: '',
-  siteVisitRequired: 'No',
-  proposalSubmitted: 'No',
-  shortlisted: 'No',
-  dealClosed: 'No',
-  assigneeId: '',
+  firstContactDate: '',
+  status: 'NEW',
+  optionShared: 'No',
+  lastContactDate: '',
+  nextActionPlan: '',
+  actionDate: '',
+  remark: '',
 };
 
 const LeadsManager: React.FC = () => {
   const { user } = useAuth();
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<any | null>(null);
+  const [editingLead, setEditingLead] = useState<any | null>(null);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [filters, setFilters] = useState({
@@ -79,9 +83,9 @@ const LeadsManager: React.FC = () => {
   const loadLeads = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiGet<{ data: Lead[]; meta: any }>('/api/v1/leads', filters);
+      const response = await apiGet('/api/v1/leads', filters);
       if (response.ok && response.data) {
-        setLeads(response.data.data);
+        setLeads(response.data);
       }
     } catch (error) {
       console.error('Failed to load leads:', error);
@@ -138,11 +142,13 @@ const LeadsManager: React.FC = () => {
           budget: formData.budget ? parseFloat(formData.budget) : null,
           city: formData.city,
           location_preference: formData.locationPreference,
-          site_visit_required: formData.siteVisitRequired,
-          proposal_submitted: formData.proposalSubmitted,
-          shortlisted: formData.shortlisted,
-          deal_closed: formData.dealClosed,
-          assignee_id: formData.assigneeId || null,
+          first_contact_date: formData.firstContactDate || null,
+          status: formData.status,
+          option_shared: formData.optionShared,
+          last_contact_date: formData.lastContactDate || null,
+          next_action_plan: formData.nextActionPlan,
+          action_date: formData.actionDate || null,
+          remark: formData.remark,
         };
 
         if (editingLead) {
@@ -169,11 +175,11 @@ const LeadsManager: React.FC = () => {
     [formData, editingLead, loadLeads, resetForm, validateForm]
   );
 
-  const handleEdit = useCallback((lead: Lead) => {
+  const handleEdit = useCallback((lead: any) => {
     setEditingLead(lead);
     setFormData({
       inquiryNo: lead.inquiry_no || '',
-      inquiryDate: lead.inquiry_date || '',
+      inquiryDate: lead.inquiry_date?.split('T')[0] || '',
       clientCompany: lead.client_company || '',
       contactPerson: lead.contact_person || '',
       contactNo: lead.contact_no || '',
@@ -187,17 +193,19 @@ const LeadsManager: React.FC = () => {
       budget: lead.budget?.toString() || '',
       city: lead.city || '',
       locationPreference: lead.location_preference || '',
-      siteVisitRequired: lead.site_visit_required || 'No',
-      proposalSubmitted: lead.proposal_submitted || 'No',
-      shortlisted: lead.shortlisted || 'No',
-      dealClosed: lead.deal_closed || 'No',
-      assigneeId: lead.assignee_id || '',
+      firstContactDate: lead.first_contact_date?.split('T')[0] || '',
+      status: lead.status || 'NEW',
+      optionShared: lead.option_shared || 'No',
+      lastContactDate: lead.last_contact_date?.split('T')[0] || '',
+      nextActionPlan: lead.next_action_plan || '',
+      actionDate: lead.action_date?.split('T')[0] || '',
+      remark: lead.remark || '',
     });
     setShowModal(true);
   }, []);
 
   const handleDelete = useCallback(
-    async (lead: Lead) => {
+    async (lead: any) => {
       if (!window.confirm('Are you sure you want to delete this lead?')) return;
 
       try {
@@ -216,14 +224,15 @@ const LeadsManager: React.FC = () => {
     [loadLeads]
   );
 
-  const handleViewDetails = useCallback((lead: Lead) => {
+  const handleViewDetails = useCallback((lead: any) => {
     setSelectedLead(lead);
     setShowDetailsModal(true);
   }, []);
 
   const handleExport = useCallback(async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/v1/leads?format=csv&${new URLSearchParams(filters)}`, {
+      const queryParams = new URLSearchParams({ ...filters, format: 'csv' });
+      const response = await fetch(`${API_BASE}/api/v1/leads?${queryParams}`, {
         credentials: 'include'
       });
       
@@ -254,18 +263,14 @@ const LeadsManager: React.FC = () => {
         const formData = new FormData();
         formData.append('file', file);
         
-        const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/v1/leads/import`, {
-          method: 'POST',
-          credentials: 'include',
-          body: formData
-        });
+        const response = await apiUpload('/api/v1/leads/import', formData);
 
         if (response.ok) {
           await loadLeads();
-          alert('Import completed successfully!');
-        } else {
-          const error = await response.json();
-          alert(`Import failed: ${error.message}`);
+          alert(`Import completed! ${response.data?.details?.created || 0} leads created.`);
+          if (response.data?.details?.errors?.length > 0) {
+            console.warn('Import errors:', response.data.details.errors);
+          }
         }
       } catch (error) {
         console.error('Import failed:', error);
@@ -317,8 +322,8 @@ const LeadsManager: React.FC = () => {
       render: (value: number) => value ? `₹${value.toLocaleString()}` : '-'
     },
     { key: 'city', label: 'City', sortable: true },
-    { key: 'owner_name', label: 'Owner', sortable: true },
-    { key: 'created_at', label: 'Created', sortable: true },
+    { key: 'lead_manager_name', label: 'Manager', sortable: true },
+    { key: 'created_at', label: 'Created', sortable: true, render: (value: string) => new Date(value).toLocaleDateString() },
   ];
 
   const actions = [
@@ -343,7 +348,7 @@ const LeadsManager: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -353,13 +358,15 @@ const LeadsManager: React.FC = () => {
           <p className="text-base text-gray-600">Manage and track your sales leads</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={handleImport}
-            className="flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-md hover:bg-orange-700 transition-colors"
-          >
-            <Upload className="h-4 w-4" />
-            <span>Import</span>
-          </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={handleImport}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-md hover:bg-orange-700 transition-colors"
+            >
+              <Upload className="h-4 w-4" />
+              <span>Import</span>
+            </button>
+          )}
           <button
             onClick={handleExport}
             className="flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors"
@@ -465,20 +472,15 @@ const LeadsManager: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Inquiry No. *
+                  Inquiry No.
                 </label>
                 <input
                   type="text"
                   value={formData.inquiryNo}
                   onChange={(e) => setFormData({ ...formData, inquiryNo: e.target.value })}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
-                    errors.inquiryNo ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Auto-generated if empty"
                 />
-                {errors.inquiryNo && (
-                  <p className="text-red-500 text-xs mt-1">{errors.inquiryNo}</p>
-                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -572,7 +574,7 @@ const LeadsManager: React.FC = () => {
                 </label>
                 <select
                   value={formData.typeOfPlace}
-                  onChange={(e) => setFormData({ ...formData, typeOfPlace: e.target.value as Lead['type_of_place'] })}
+                  onChange={(e) => setFormData({ ...formData, typeOfPlace: e.target.value as FormData['typeOfPlace'] })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
                   required
                 >
@@ -591,7 +593,7 @@ const LeadsManager: React.FC = () => {
                 </label>
                 <select
                   value={formData.transactionType}
-                  onChange={(e) => setFormData({ ...formData, transactionType: e.target.value as Lead['transaction_type'] })}
+                  onChange={(e) => setFormData({ ...formData, transactionType: e.target.value as FormData['transactionType'] })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
                   required
                 >

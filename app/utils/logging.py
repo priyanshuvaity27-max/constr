@@ -2,7 +2,7 @@ import logging
 import json
 import sys
 from typing import Any, Dict
-from app.config import settings
+from app.core.config import settings
 
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:

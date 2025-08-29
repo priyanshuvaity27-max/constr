@@ -1,7 +1,8 @@
 import csv
 import io
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Type
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ValidationError
 
 def export_to_csv(data: List[Dict[str, Any]], filename: str) -> StreamingResponse:
     """Export data to CSV format"""
@@ -45,8 +46,8 @@ def export_to_csv(data: List[Dict[str, Any]], filename: str) -> StreamingRespons
         headers={"Content-Disposition": f"attachment; filename={filename}.csv"}
     )
 
-def import_from_csv(csv_content: str, expected_headers: List[str]) -> Dict[str, Any]:
-    """Import data from CSV content"""
+def import_from_csv(csv_content: str, model_class: Type[BaseModel]) -> Dict[str, Any]:
+    """Import data from CSV content with validation"""
     try:
         reader = csv.DictReader(io.StringIO(csv_content))
         
@@ -54,26 +55,32 @@ def import_from_csv(csv_content: str, expected_headers: List[str]) -> Dict[str, 
         if not reader.fieldnames:
             raise ValueError("CSV file has no headers")
         
-        missing_headers = set(expected_headers) - set(reader.fieldnames)
-        if missing_headers:
-            raise ValueError(f"Missing required headers: {missing_headers}")
-        
         # Parse rows
-        rows = []
+        valid_rows = []
         errors = []
         
         for i, row in enumerate(reader, 1):
             try:
                 # Clean empty values
                 cleaned_row = {k: v.strip() if v else None for k, v in row.items()}
-                rows.append(cleaned_row)
+                
+                # Validate with Pydantic model
+                validated_data = model_class(**cleaned_row)
+                valid_rows.append(validated_data.dict())
+                
+            except ValidationError as e:
+                error_details = []
+                for error in e.errors():
+                    field = ".".join(str(x) for x in error["loc"])
+                    error_details.append(f"{field}: {error['msg']}")
+                errors.append(f"Row {i}: {'; '.join(error_details)}")
             except Exception as e:
                 errors.append(f"Row {i}: {str(e)}")
         
         return {
-            "rows": rows,
+            "valid_rows": valid_rows,
             "errors": errors,
-            "total_rows": len(rows),
+            "total_rows": len(valid_rows),
             "error_count": len(errors)
         }
         
