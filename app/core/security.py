@@ -1,20 +1,18 @@
 from datetime import datetime, timedelta
-from typing import Optional, Union, Dict, Any
+from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status, Request, Response
 from app.core.config import settings
-from app.utils.errors import AppException
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({
         "exp": expire,
@@ -23,23 +21,20 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
         "aud": "real-estate-crm"
     })
     
-    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
-
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
-
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
-
 
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         payload = jwt.decode(
             token, 
-            settings.secret_key, 
-            algorithms=[settings.algorithm],
+            settings.SECRET_KEY, 
+            algorithms=[settings.ALGORITHM],
             audience="real-estate-crm",
             issuer="real-estate-crm"
         )
@@ -47,17 +42,15 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
     except JWTError:
         return None
 
-
 def set_auth_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         key="auth_token",
         value=token,
-        max_age=settings.access_token_expire_minutes * 60,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         httponly=True,
         secure=not settings.DEBUG,
         samesite="lax"
     )
-
 
 def clear_auth_cookie(response: Response) -> None:
     response.delete_cookie(
@@ -67,14 +60,11 @@ def clear_auth_cookie(response: Response) -> None:
         samesite="lax"
     )
 
-
 def get_token_from_request(request: Request) -> Optional[str]:
     return request.cookies.get("auth_token")
 
-
 # Rate limiting (simple in-memory)
 _rate_limits: Dict[str, Dict[str, Any]] = {}
-
 
 def check_rate_limit(key: str, limit: int, window_minutes: int = 1) -> bool:
     now = datetime.utcnow()

@@ -1,28 +1,23 @@
-# Real Estate CRM - Full Stack Application
+# Real Estate CRM - Complete System
 
-A production-ready Real Estate CRM system with React frontend, FastAPI backend, Cloudflare D1 database, and R2 storage.
+A production-ready Real Estate CRM system with React frontend, FastAPI backend, and Supabase integration.
 
-## System Architecture
+## 🏗️ System Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React App     │    │   FastAPI       │    │ Cloudflare      │
-│   (Frontend)    │◄──►│   (Backend)     │◄──►│ Worker          │
-│                 │    │                 │    │ (DB Proxy)      │
+│   React App     │    │   FastAPI       │    │   Supabase      │
+│   (Frontend)    │◄──►│   (Backend)     │◄──►│   (Database)    │
+│                 │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                                         │
                                                ┌─────────────────┐
-                                               │ Cloudflare D1   │
-                                               │ (Database)      │
-                                               └─────────────────┘
-                                                        │
-                                               ┌─────────────────┐
-                                               │ Cloudflare R2   │
+                                               │ AWS S3/R2       │
                                                │ (File Storage)  │
                                                └─────────────────┘
 ```
 
-## Features
+## ✨ Features
 
 ### Authentication & Authorization
 - **6 Hardcoded Users**: 1 admin ("boss") + 5 employees ("emp1-emp5")
@@ -39,73 +34,54 @@ A production-ready Real Estate CRM system with React frontend, FastAPI backend, 
 ### Data Management
 - **Advanced Filtering**: Per-column filters with global search
 - **CSV Import/Export**: Bulk data operations with validation
-- **File Uploads**: Document management with R2 storage
+- **File Uploads**: Document management with cloud storage
 - **Real-time Updates**: Live data synchronization
 
-### Security
-- **HMAC-Signed Requests**: All database calls cryptographically signed
-- **Prepared Statements**: SQL injection prevention
-- **Rate Limiting**: Login and API rate limits
-- **Input Validation**: Comprehensive data validation
+### Entities Supported
+- **Leads**: Lead tracking and management
+- **Developers**: Corporate, Coworking, Warehouse, Mall developers
+- **Contacts**: Clients, Developer contacts, Brokers, Individual owners
+- **Inventory**: Corporate buildings, Coworking spaces, Warehouses, Retail malls
+- **Land Parcels**: Land inventory management
+- **Documents**: File upload and management
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+
 - Python 3.11+
-- Cloudflare account with D1 and R2 enabled
+- Supabase account (or PostgreSQL)
+- AWS S3/Cloudflare R2 account (for file storage)
 
-### 1. Setup Cloudflare Services
+### 1. Setup Database
 
-```bash
-# Install Wrangler CLI
-npm install -g wrangler
+1. **Create Supabase Project**:
+   - Go to [supabase.com](https://supabase.com)
+   - Create new project
+   - Note your project URL and anon key
 
-# Login to Cloudflare
-wrangler login
+2. **Run Migrations**:
+   ```bash
+   # The migrations will be applied automatically when you connect to Supabase
+   ```
 
-# Create D1 database
-wrangler d1 create real_estate_db
-# Note the database_id for later
-
-# Create R2 bucket
-wrangler r2 bucket create real-estate-documents
-```
-
-### 2. Deploy Database Worker
-
-```bash
-cd cloudflare-worker
-npm install
-
-# Update wrangler.toml with your database_id
-# Set HMAC secret
-wrangler secret put HMAC_SECRET
-
-# Apply database schema
-wrangler d1 migrations apply real_estate_db
-wrangler d1 execute real_estate_db --file ../db/seed.sql
-
-# Deploy worker
-wrangler deploy
-# Note the worker URL for backend configuration
-```
-
-### 3. Setup Backend
+### 2. Setup Backend
 
 ```bash
 cd backend
-pip install -e .
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your Cloudflare credentials and worker URL
+# Edit .env with your Supabase and storage credentials
 
 # Run backend
 uvicorn app.main:app --reload
 ```
 
-### 4. Setup Frontend
+### 3. Setup Frontend
 
 ```bash
 # Install dependencies (if not already done)
@@ -119,33 +95,66 @@ cp .env.example .env
 npm run dev
 ```
 
-### 5. Access Application
+### 4. Access Application
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 
-## Default Accounts
+## 🔐 Default Accounts
 
-| Username | Password    | Role     |
-|----------|-------------|----------|
-| boss     | password123 | admin    |
-| emp1     | password123 | employee |
-| emp2     | password123 | employee |
-| emp3     | password123 | employee |
-| emp4     | password123 | employee |
-| emp5     | password123 | employee |
+| Username | Password    | Role     | Description |
+|----------|-------------|----------|-------------|
+| boss     | password123 | admin    | Full access, can approve actions |
+| emp1     | password123 | employee | Can create pending actions |
+| emp2     | password123 | employee | Can create pending actions |
+| emp3     | password123 | employee | Can create pending actions |
+| emp4     | password123 | employee | Can create pending actions |
+| emp5     | password123 | employee | Can create pending actions |
 
-## Development Workflow
+## 📋 Usage Guide
 
-### Adding New Features
+### For Admins
+1. **Login** as "boss" with password "password123"
+2. **Manage all data** directly without approval
+3. **Review pending actions** from employees
+4. **Import/Export** CSV data for all modules
+5. **Upload documents** for any entity
 
-1. **Database Changes**: Update migrations in `/db/migrations/`
-2. **Worker Updates**: Add new endpoints in `cloudflare-worker/src/index.ts`
-3. **Backend Changes**: Add schemas, routers, and services
-4. **Frontend Updates**: Update components and API calls
+### For Employees
+1. **Login** as "emp1-emp5" with password "password123"
+2. **View own leads** and assigned leads
+3. **Create new leads** directly
+4. **Request updates/deletes** (creates pending actions)
+5. **Upload documents** for own leads only
 
-### Testing Changes
+### Approval Workflow
+1. **Employee** submits update/delete request
+2. **System** creates pending action
+3. **Admin** reviews in "Pending Actions" section
+4. **Admin** approves or rejects with notes
+5. **System** applies changes and logs audit trail
+
+## 🛠️ Development
+
+### Adding New Entity Types
+
+1. **Create Model** in `app/models/`
+2. **Create Schema** in `app/schemas/`
+3. **Create Router** in `app/api/v1/endpoints/`
+4. **Add to API Router** in `app/api/v1/api.py`
+5. **Create Frontend Component** in `src/components/`
+6. **Add to Navigation** in `src/components/Layout/Sidebar.tsx`
+
+### Database Migrations
+
+```bash
+cd backend
+alembic revision --autogenerate -m "description"
+alembic upgrade head
+```
+
+### Testing
 
 ```bash
 # Backend tests
@@ -154,69 +163,32 @@ pytest tests/ -v
 
 # Frontend tests
 npm test
-
-# Integration tests
-# Test with real Cloudflare services in staging
 ```
 
-### Deployment
+## 🚀 Deployment
 
-#### Production Backend
-```bash
-# Build and deploy container
-docker build -t real-estate-crm-backend .
-# Deploy to your container platform (Render, Fly.io, etc.)
-```
+### Backend (Render)
+1. **Connect GitHub** repository to Render
+2. **Set Environment Variables** from `.env.example`
+3. **Build Command**: `pip install -r requirements.txt`
+4. **Start Command**: `python main.py`
 
-#### Production Worker
-```bash
-cd cloudflare-worker
-wrangler deploy --env production
-```
+### Frontend (Vercel)
+1. **Connect GitHub** repository to Vercel
+2. **Set Environment Variables**: `VITE_API_BASE=https://your-backend.render.com`
+3. **Deploy** automatically on push
 
-#### Production Frontend
-```bash
-# Build for production
-npm run build
-# Deploy to your hosting platform (Vercel, Netlify, etc.)
-```
+### Database (Supabase)
+1. **Create Project** on Supabase
+2. **Run Migrations** (automatic with RLS policies)
+3. **Update** `DATABASE_URL` in backend environment
 
-## Configuration
-
-### Environment Variables
-
-#### Backend (.env)
-```bash
-DEBUG=false
-JWT_SECRET=your-production-secret
-WORKER_BASE=https://your-worker.workers.dev
-WORKER_HMAC_SECRET=your-hmac-secret
-R2_ENDPOINT=https://account-id.r2.cloudflarestorage.com
-R2_ACCESS_KEY_ID=your-access-key
-R2_SECRET_ACCESS_KEY=your-secret-key
-CORS_ORIGINS=["https://your-frontend.com"]
-```
-
-#### Frontend (.env)
-```bash
-VITE_API_BASE=https://your-api.com
-```
-
-#### Worker (wrangler.toml)
-```toml
-[vars]
-ALLOWED_ORIGINS = "https://your-frontend.com"
-
-[env.production.vars]
-ALLOWED_ORIGINS = "https://your-frontend.com"
-```
-
-## API Usage Examples
+## 📊 API Usage Examples
 
 ### Authentication
 ```javascript
 // Login
-const response = await fetch('/api/auth/login', {
+const response = await fetch('/api/v1/auth/login', {
   method: 'POST',
   credentials: 'include',
   headers: { 'Content-Type': 'application/json' },
@@ -224,13 +196,13 @@ const response = await fetch('/api/auth/login', {
 });
 
 // Get current user
-const user = await fetch('/api/auth/me', { credentials: 'include' });
+const user = await fetch('/api/v1/auth/me', { credentials: 'include' });
 ```
 
 ### Data Operations
 ```javascript
 // List leads with filters
-const leads = await fetch('/api/v1/leads?city=Mumbai&type_of_place=Office', {
+const leads = await fetch('/api/v1/leads?city=Mumbai&type_of_space=Office', {
   credentials: 'include'
 });
 
@@ -263,14 +235,36 @@ const upload = await fetch('/api/v1/upload', {
 });
 ```
 
-## Troubleshooting
+## 🔧 Configuration
+
+### Database Tables
+The system includes 18 tables covering all aspects of real estate CRM:
+
+- **Core**: employees, leads, pending_actions, audit_log, documents
+- **Developers**: corporate_developers, coworking_developers, warehouse_developers, mall_developers
+- **Contacts**: clients, developer_contacts, brokers, individual_owners
+- **Inventory**: corporate_buildings, coworking_spaces, warehouses, retail_malls, land_parcels
+
+### RBAC Implementation
+- **Row Level Security** enabled on all tables
+- **Ownership-based access** for employees
+- **Full access** for admins
+- **Pending actions** for employee mutations
+
+## 📚 Documentation
+
+- **API Docs**: Available at `/docs` when running backend
+- **Database Schema**: See `supabase/migrations/` for complete schema
+- **Frontend Components**: Documented in component files
+
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-1. **CORS Errors**: Ensure CORS_ORIGINS includes your frontend URL
-2. **Authentication Failures**: Check JWT_SECRET matches and cookies are enabled
-3. **Database Errors**: Verify Worker is deployed and D1 database exists
-4. **File Upload Issues**: Check R2 credentials and bucket permissions
+1. **Database Connection**: Check `DATABASE_URL` format
+2. **Authentication Failures**: Verify `SECRET_KEY` and cookie settings
+3. **File Upload Issues**: Check storage credentials and bucket permissions
+4. **CORS Errors**: Ensure frontend URL is in `CORS_ORIGINS`
 
 ### Debug Mode
 
@@ -279,18 +273,6 @@ Enable debug logging:
 DEBUG=true uvicorn app.main:app --reload --log-level debug
 ```
 
-### Health Checks
-
-- **Backend**: `GET /health`
-- **Worker**: `GET https://your-worker.workers.dev/health`
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Submit a pull request
-
-## License
+## 📄 License
 
 MIT License - see LICENSE file for details.

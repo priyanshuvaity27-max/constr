@@ -1,67 +1,68 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
-from app.models.lead import TypeOfPlace, TransactionType, LeadStatus, OptionShared
-
+from datetime import datetime, date
+from decimal import Decimal
+from app.models.lead import TypeOfSpace, TransactionType, LeadStatus
 
 class LeadBase(BaseModel):
     inquiry_no: str
-    inquiry_date: datetime
+    inquiry_date: date
     client_company: str
     contact_person: str
     contact_no: str
-    email: EmailStr
+    email: Optional[EmailStr] = None
     designation: Optional[str] = None
     department: Optional[str] = None
-    description: Optional[str] = None
-    type_of_place: TypeOfPlace
-    space_requirement: Optional[str] = None
-    transaction_type: TransactionType
-    budget: Optional[int] = None
-    city: Optional[str] = None
+    type_of_space: Optional[TypeOfSpace] = None
+    space_requirement: str
+    transaction_type: Optional[TransactionType] = None
+    representative: Optional[str] = None
+    budget: Optional[Decimal] = None
+    city: str
     location_preference: Optional[str] = None
-    first_contact_date: Optional[datetime] = None
-    lead_managed_by: str
+    description: Optional[str] = None
+    first_contact_date: Optional[date] = None
+    last_contact_date: Optional[date] = None
+    lead_managed_by: Optional[str] = None
+    action_date: Optional[date] = None
     status: LeadStatus = LeadStatus.NEW
-    option_shared: OptionShared = OptionShared.NO
-    last_contact_date: Optional[datetime] = None
     next_action_plan: Optional[str] = None
-    action_date: Optional[datetime] = None
-    remark: Optional[str] = None
-
+    option_shared: bool = False
+    remarks: Optional[str] = None
 
 class LeadCreate(LeadBase):
     pass
 
-
 class LeadUpdate(BaseModel):
     inquiry_no: Optional[str] = None
-    inquiry_date: Optional[datetime] = None
+    inquiry_date: Optional[date] = None
     client_company: Optional[str] = None
     contact_person: Optional[str] = None
     contact_no: Optional[str] = None
     email: Optional[EmailStr] = None
     designation: Optional[str] = None
     department: Optional[str] = None
-    description: Optional[str] = None
-    type_of_place: Optional[TypeOfPlace] = None
+    type_of_space: Optional[TypeOfSpace] = None
     space_requirement: Optional[str] = None
     transaction_type: Optional[TransactionType] = None
-    budget: Optional[int] = None
+    representative: Optional[str] = None
+    budget: Optional[Decimal] = None
     city: Optional[str] = None
     location_preference: Optional[str] = None
-    first_contact_date: Optional[datetime] = None
+    description: Optional[str] = None
+    first_contact_date: Optional[date] = None
+    last_contact_date: Optional[date] = None
     lead_managed_by: Optional[str] = None
+    action_date: Optional[date] = None
     status: Optional[LeadStatus] = None
-    option_shared: Optional[OptionShared] = None
-    last_contact_date: Optional[datetime] = None
     next_action_plan: Optional[str] = None
-    action_date: Optional[datetime] = None
-    remark: Optional[str] = None
-
+    option_shared: Optional[bool] = None
+    remarks: Optional[str] = None
 
 class LeadResponse(LeadBase):
     id: str
+    owner_id: Optional[str] = None
+    assignee_id: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

@@ -6,7 +6,6 @@ interface User {
   username: string;
   name: string;
   email?: string;
-  mobile_no?: string;
   role: string;
   status: string;
   created_at: string;
@@ -19,6 +18,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   loading: boolean;
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -59,11 +59,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(false);
     }
   };
+
+  const refresh = async () => {
+    await checkAuth();
+  };
   
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<boolean> => {
     try {
       const response = await apiPost<{ user: User }>('/api/v1/auth/login', {
-        username: email,
+        username,
         password
       });
       
@@ -79,11 +83,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    apiPost('/api/v1/auth/logout').finally(() => {
+  const logout = async () => {
+    try {
+      await apiPost('/api/v1/auth/logout');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
       setUser(null);
       setIsAuthenticated(false);
-    });
+    }
   };
 
   const value: AuthContextType = {
@@ -92,6 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     isAuthenticated,
     loading,
+    refresh,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

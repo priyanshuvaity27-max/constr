@@ -1,46 +1,46 @@
 from pydantic_settings import BaseSettings
-from typing import Optional, List
+from typing import List, Optional
 import os
 
-
 class Settings(BaseSettings):
-    # Environment
-    DEBUG: bool = True
-    ENVIRONMENT: str = "development"
-    
     # Database
-    database_url: str = "postgresql://postgres:password@localhost:5432/real_estate_crm"
+    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/real_estate_crm"
     
-    # Security
-    secret_key: str = "your-secret-key-change-this-in-production"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 480  # 8 hours
+    # JWT Settings
+    SECRET_KEY: str = "your-secret-key-change-this-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     
-    # Hardcoded users (no self-registration)
-    allowed_usernames: List[str] = ["boss", "emp1", "emp2", "emp3", "emp4", "emp5"]
+    # Supabase (if using Supabase instead of local PostgreSQL)
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_KEY: Optional[str] = None
+    SUPABASE_BUCKET: str = "documents"
     
-    # AWS S3 Storage (Optional)
-    aws_access_key_id: Optional[str] = None
-    aws_secret_access_key: Optional[str] = None
-    aws_bucket_name: Optional[str] = None
-    aws_region: str = "us-east-1"
+    # AWS S3/R2 Storage
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_BUCKET_NAME: Optional[str] = None
+    AWS_REGION: str = "us-east-1"
     
-    # Supabase Storage (Alternative to S3)
-    supabase_url: Optional[str] = None
-    supabase_key: Optional[str] = None
-    supabase_bucket: str = "documents"
+    # Cloudflare R2 (alternative to S3)
+    R2_ENDPOINT: Optional[str] = None
+    R2_ACCESS_KEY_ID: Optional[str] = None
+    R2_SECRET_ACCESS_KEY: Optional[str] = None
+    R2_BUCKET: Optional[str] = None
     
-    # CORS & Security
+    # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
-    ALLOWED_HOSTS: List[str] = ["*"]
     
-    # Rate limiting
+    # Environment
+    ENV: str = "development"
+    DEBUG: bool = True
+    
+    # Rate Limiting
     RATE_LIMIT_LOGIN: int = 5  # per minute per IP
-    RATE_LIMIT_MUTATION: int = 30  # per minute per user
+    RATE_LIMIT_API: int = 100  # per minute per user
     
     class Config:
         env_file = ".env"
         case_sensitive = True
-
 
 settings = Settings()

@@ -1,34 +1,60 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Clock, Check, X, Eye, AlertCircle } from 'lucide-react';
+import { Clock, Check, X, Eye, AlertCircle, FileText } from 'lucide-react';
 import DataTable from './DataTable';
 import Modal from './Modal';
-import { PendingAction } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { apiGet, apiPost, ApiError } from '../../lib/api';
 
+interface PendingAction {
+  id: string;
+  module: string;
+  action_type: string;
+  target_id?: string;
+  payload: any;
+  requested_by: string;
+  requested_by_name?: string;
+  requested_at: string;
+  status: string;
+  reviewed_by?: string;
+  reviewed_by_name?: string;
+  reviewed_at?: string;
+  note?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
 const PendingActionsManager: React.FC = () => {
   const { user } = useAuth();
-  const [pendingActions, setPendingActions] = useState<any[]>([]);
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedAction, setSelectedAction] = useState<any | null>(null);
+  const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approvalType, setApprovalType] = useState<'approve' | 'reject'>('approve');
   const [filters, setFilters] = useState({
     status: 'pending',
     module: '',
-    type: '',
+    action_type: '',
     page: 1,
     page_size: 50,
+  });
+  const [meta, setMeta] = useState({
+    total: 0,
+    page: 1,
+    page_size: 50,
+    total_pages: 0
   });
 
   const loadPendingActions = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiGet('/api/v1/pending-actions', filters);
+      const response = await apiGet<PendingAction[]>('/api/v1/pending-actions', filters);
       if (response.ok && response.data) {
         setPendingActions(response.data);
+        if (response.meta) {
+          setMeta(response.meta);
+        }
       }
     } catch (error) {
       console.error('Failed to load pending actions:', error);
@@ -41,19 +67,19 @@ const PendingActionsManager: React.FC = () => {
     loadPendingActions();
   }, [loadPendingActions]);
 
-  const handleViewDetails = useCallback((action: any) => {
+  const handleViewDetails = useCallback((action: PendingAction) => {
     setSelectedAction(action);
     setShowDetailsModal(true);
   }, []);
 
-  const handleApprove = useCallback((action: any) => {
+  const handleApprove = useCallback((action: PendingAction) => {
     setSelectedAction(action);
     setApprovalType('approve');
     setApprovalNotes('');
     setShowApprovalModal(true);
   }, []);
 
-  const handleReject = useCallback((action: any) => {
+  const handleReject = useCallback((action: PendingAction) => {
     setSelectedAction(action);
     setApprovalType('reject');
     setApprovalNotes('');
@@ -69,7 +95,7 @@ const PendingActionsManager: React.FC = () => {
         : `/api/v1/pending-actions/${selectedAction.id}/reject`;
       
       const payload = approvalType === 'reject' 
-        ? { status: 'rejected', admin_notes: approvalNotes }
+        ? { status: 'rejected', note: approvalNotes }
         : { admin_notes: approvalNotes };
 
       await apiPost(endpoint, payload);
@@ -86,11 +112,16 @@ const PendingActionsManager: React.FC = () => {
     }
   }, [selectedAction, approvalType, approvalNotes, loadPendingActions]);
 
+  const handlePageChange = useCallback((page: number) => {
+    setFilters(prev => ({ ...prev, page }));
+  }, []);
+
   const getActionTypeColor = (type: string) => {
     switch (type) {
       case 'create': return 'bg-green-100 text-green-800';
       case 'update': return 'bg-blue-100 text-blue-800';
       case 'delete': return 'bg-red-100 text-red-800';
+      case 'bulk_import': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -111,23 +142,23 @@ const PendingActionsManager: React.FC = () => {
       sortable: true,
       render: (value: string) => (
         <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
-          {value}
+          {value.replace('_', ' ')}
         </span>
       )
     },
     { 
-      key: 'type', 
+      key: 'action_type', 
       label: 'Action Type', 
       sortable: true,
       render: (value: string) => (
         <span className={`px-2 py-1 text-xs font-medium rounded-full ${getActionTypeColor(value)} capitalize`}>
-          {value}
+          {value.replace('_', ' ')}
         </span>
       )
     },
     { key: 'requested_by_name', label: 'Requested By', sortable: true },
     { 
-      key: 'created_at', 
+      key: 'requested_at', 
       label: 'Requested At', 
       sortable: true,
       render: (value: string) => new Date(value).toLocaleDateString()
@@ -215,24 +246,33 @@ const PendingActionsManager: React.FC = () => {
             >
               <option value="">All Modules</option>
               <option value="leads">Leads</option>
-              <option value="developers">Developers</option>
-              <option value="projects">Projects</option>
-              <option value="inventory">Inventory</option>
-              <option value="land">Land</option>
-              <option value="contacts">Contacts</option>
+              <option value="corporate_developers">Corporate Developers</option>
+              <option value="coworking_developers">Coworking Developers</option>
+              <option value="warehouse_developers">Warehouse Developers</option>
+              <option value="mall_developers">Mall Developers</option>
+              <option value="clients">Clients</option>
+              <option value="developer_contacts">Developer Contacts</option>
+              <option value="brokers">Brokers</option>
+              <option value="individual_owners">Individual Owners</option>
+              <option value="corporate_buildings">Corporate Buildings</option>
+              <option value="coworking_spaces">Coworking Spaces</option>
+              <option value="warehouses">Warehouses</option>
+              <option value="retail_malls">Retail Malls</option>
+              <option value="land_parcels">Land Parcels</option>
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Action Type</label>
             <select
-              value={filters.type}
-              onChange={(e) => setFilters({ ...filters, type: e.target.value, page: 1 })}
+              value={filters.action_type}
+              onChange={(e) => setFilters({ ...filters, action_type: e.target.value, page: 1 })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             >
               <option value="">All Types</option>
               <option value="create">Create</option>
               <option value="update">Update</option>
               <option value="delete">Delete</option>
+              <option value="bulk_import">Bulk Import</option>
             </select>
           </div>
         </div>
@@ -248,6 +288,8 @@ const PendingActionsManager: React.FC = () => {
           importable={false}
           title="Pending Actions"
           loading={loading}
+          meta={meta}
+          onPageChange={handlePageChange}
         />
       </div>
 
@@ -263,12 +305,12 @@ const PendingActionsManager: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-500">Module</label>
-                <p className="text-sm text-gray-900 font-medium capitalize">{selectedAction.module}</p>
+                <p className="text-sm text-gray-900 font-medium capitalize">{selectedAction.module.replace('_', ' ')}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-500">Action Type</label>
-                <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getActionTypeColor(selectedAction.type)} capitalize`}>
-                  {selectedAction.type}
+                <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getActionTypeColor(selectedAction.action_type)} capitalize`}>
+                  {selectedAction.action_type.replace('_', ' ')}
                 </span>
               </div>
               <div>
@@ -281,19 +323,31 @@ const PendingActionsManager: React.FC = () => {
                   {selectedAction.status}
                 </span>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Requested At</label>
+                <p className="text-sm text-gray-900">{new Date(selectedAction.requested_at).toLocaleString()}</p>
+              </div>
+              {selectedAction.reviewed_at && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Reviewed At</label>
+                  <p className="text-sm text-gray-900">{new Date(selectedAction.reviewed_at).toLocaleString()}</p>
+                </div>
+              )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-2">Requested Data</label>
-              <pre className="text-sm text-gray-900 bg-gray-50 p-4 rounded-md overflow-auto max-h-64">
-                {JSON.stringify(selectedAction.data, null, 2)}
-              </pre>
+              <label className="block text-sm font-medium text-gray-500 mb-2">Requested Changes</label>
+              <div className="bg-gray-50 p-4 rounded-md">
+                <pre className="text-sm text-gray-900 overflow-auto max-h-64 whitespace-pre-wrap">
+                  {JSON.stringify(selectedAction.payload, null, 2)}
+                </pre>
+              </div>
             </div>
 
-            {selectedAction.admin_notes && (
+            {selectedAction.note && (
               <div>
                 <label className="block text-sm font-medium text-gray-500">Admin Notes</label>
-                <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-md">{selectedAction.admin_notes}</p>
+                <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-md">{selectedAction.note}</p>
               </div>
             )}
           </div>
